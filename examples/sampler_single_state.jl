@@ -42,11 +42,23 @@ function gibbs_sampler(folder_name::String, chain_number::Int64, N::Int64, n::In
     logpdf_current = logpdf(Ψcurrent)
     logpdf_next = logpdf_current
 
-    current_coulomb_energy = 0.50 * sum(1.0 ./ Ψcurrent.dist_matrix)
-    accumulated_coulomb_energy = zero(Float64)
+    rgrid::Vector{Float64} = LinRange(0.0, 2.0, 5_000) ### 5_000 points between 0 and 2.
 
-    θmesh::Vector{Float64} = LinRange(0.0, pi, 250)
-    dA = 2.0 * pi .* (cos.(θmesh[begin:end-1]) .- cos.(θmesh[begin+1:end])) .* (N / (2 * ν))
+    dr = rgrid[2] - rgrid[1]
+
+    accumulated_pair_density = zeros(Float64, length(rgrid)-1)
+    
+    current_distance_distribution = zeros(Float64, length(rgrid)-1)
+    
+    for i in 1:system_size-1
+        for j in i+1:system_size
+            r = Ψcurrent.dist_matrix[j-1, i]
+            current_distance_distribution[ceil(Int64, r/dr)] += 1.0
+        end
+    end
+
+    θmesh = map(x->acos(x), LinRange(1.0, -1.0, 500))
+    Agrid = 2.0 * pi .* (cos.(θmesh[begin:end-1]) .- cos.(θmesh[begin+1:end]))
 
     accumulated_density = zeros(Float64, length(θmesh))
     t0 = time()
