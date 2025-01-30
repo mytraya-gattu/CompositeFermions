@@ -54,7 +54,7 @@ function gibbs_sampler(filename::Function, chain_number::Int64, Qstar::Rational{
         end
     end
 
-    θmesh = map(x->acos(x), LinRange(1.0, -1.0, 500))
+    θmesh = map(x->acos(x), LinRange(1.0, -1.0, 1_000))
     Agrid = 2.0 * pi .* (cos.(θmesh[begin:end-1]) .- cos.(θmesh[begin+1:end]))
 
     accumulated_density = zeros(Float64, length(θmesh)-1)
