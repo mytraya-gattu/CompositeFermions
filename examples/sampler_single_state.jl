@@ -169,13 +169,16 @@ function gibbs_sampler(filename::String, Qstar::Rational{Int64}, l_m_list::Vecto
 end
 
 
+# The (Qstar, l_m_list) for the ground state, one quasihole, and one quasiparticle are
+# provided by the convenience builders `cf_ground_state_lm`, `cf_quasihole_lm`, and
+# `cf_quasiparticle_lm`, so we no longer have to spell out the Λ-level occupation by hand.
+
 function sample_cf_gs(folder_name::String, chain_number::Int64, N::Int64, n::Int64, p::Int64, num_thermalization::Int64 = 5 * 10^5, num_steps::Int64 = 10^6)
 
-    Qstar = (N//n-n)//2
-    l_m_list = [(L, Lz) for L in abs(Qstar):1:(abs(Qstar)+abs(n)-1) for Lz in -L:1:L]
+    Qstar, l_m_list = cf_ground_state_lm(N, n, p)
 
     filename = joinpath(folder_name, "data_$(N)_particles_$(n)_$(2*n*p+1)_filling_factor_$(chain_number)_chain_number.jld2")
-    
+
     gibbs_sampler(filename, Qstar, l_m_list, p, num_thermalization, num_steps)
 
     return
@@ -184,13 +187,10 @@ end
 
 function sample_cf_qh(folder_name::String, chain_number::Int64, N::Int64, n::Int64, p::Int64, num_thermalization::Int64 = 5 * 10^5, num_steps::Int64 = 10^6)
 
-    Qstar = (N//n-n)//2
-    Lqh = abs(Qstar) + abs(n) - 1
-
-    l_m_list = [(L, Lz) for L in abs(Qstar):1:(abs(Qstar)+abs(n)-1) for Lz in -L:1:L if !(L == Lqh && Lz == Lqh)]
+    Qstar, l_m_list = cf_quasihole_lm(N, n, p)
 
     filename = joinpath(folder_name, "data_$(N)_particles_$(n)_$(2*n*p+1)_filling_factor_$(chain_number)_chain_number.jld2")
-    
+
     gibbs_sampler(filename, Qstar, l_m_list, p, num_thermalization, num_steps)
 
     return
@@ -199,11 +199,7 @@ end
 
 function sample_cf_qp(folder_name::String, chain_number::Int64, N::Int64, n::Int64, p::Int64, num_thermalization::Int64 = 5 * 10^5, num_steps::Int64 = 10^6)
 
-    Qstar = (N//n-n)//2
-    Lqp = abs(Qstar) + abs(n)
-
-    l_m_list = [(L, Lz) for L in abs(Qstar):1:(abs(Qstar)+abs(n)-1) for Lz in -L:1:L]
-    push!(l_m_list, (Lqp, Lqp))
+    Qstar, l_m_list = cf_quasiparticle_lm(N, n, p)
 
     filename = joinpath(folder_name, "data_$(N)_particles_$(n)_$(2*n*p+1)_filling_factor_$(chain_number)_chain_number.jld2")
     gibbs_sampler(filename, Qstar, l_m_list, p, num_thermalization, num_steps)
