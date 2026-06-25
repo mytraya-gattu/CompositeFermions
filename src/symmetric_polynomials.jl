@@ -1,5 +1,5 @@
 module SymmetricPolynomials
-export get_symmetric_polynomials!
+export get_symmetric_polynomials!, update_symmetric_polynomials!
 function get_symmetric_polynomials(roots, b) ## For reference only.
 
     dest = zeros(ComplexF64, b + 1)
@@ -16,7 +16,7 @@ function get_symmetric_polynomials(roots, b) ## For reference only.
 
         for j in min(i, b):-1:1
 
-            @inbounds dest[j+1] += roots[i] * dest[j]
+            @inbounds dest[j + 1] += roots[i] * dest[j]
 
         end
 
@@ -40,7 +40,7 @@ Calculate the first `b` elementary symmetric polynomials for the given roots.
 function get_symmetric_polynomials!(dest, roots, b)
 
     dest[1] = one(eltype(dest))
-    
+
     if b == 0
         return
     elseif b == 1
@@ -56,7 +56,7 @@ function get_symmetric_polynomials!(dest, roots, b)
 
         for j in min(i, b):-1:1
 
-            @inbounds dest[j+1] += r * dest[j]
+            @inbounds dest[j + 1] += r * dest[j]
 
         end
 
@@ -81,7 +81,7 @@ Calculate the first `b` elementary symmetric polynomials for the given roots reg
 function get_symmetric_polynomials!(dest, roots, b, reg_coeffs)
 
     dest[1] = one(eltype(dest))
-    
+
     if b == 0
         return
     elseif b == 1
@@ -95,10 +95,51 @@ function get_symmetric_polynomials!(dest, roots, b, reg_coeffs)
         r = roots[i]
         for j in min(i, b):-1:1
 
-            @inbounds dest[j+1] += r * dest[j] * reg_coeffs[j]
-            
+            @inbounds dest[j + 1] += r * dest[j] * reg_coeffs[j]
+
         end
 
+    end
+
+    return
+
+end
+"""
+    update_symmetric_polynomials!(dest, r_old, r_new, b, reg_coeffs)
+
+Incrementally update the regularized elementary symmetric polynomials when a single root
+changes from `r_old` to `r_new`. This is O(b) instead of the O(N*b) full recomputation.
+
+Uses the fact that elementary symmetric polynomials are symmetric in the roots:
+1. **Remove** `r_old` via forward recurrence (k = 1 → b):
+   `f_k ← f_k - r_old * reg_coeffs[k] * f_{k-1}`
+2. **Add** `r_new` via backward recurrence (k = b → 1):
+   `f_k ← f_k + r_new * reg_coeffs[k] * f_{k-1}`
+
+# Arguments
+- `dest`: Array of current regularized elementary symmetric polynomials (modified in-place)
+- `r_old`: The old root value being removed
+- `r_new`: The new root value being added
+- `b::Int`: Maximum order of elementary symmetric polynomials
+- `reg_coeffs`: Regularization coefficients
+
+# Returns
+- `nothing`: In-place computation
+"""
+function update_symmetric_polynomials!(dest, r_old, r_new, b, reg_coeffs)
+
+    if b == 0
+        return
+    end
+
+    # Step 1: Remove old root (forward recurrence, k = 1 → b)
+    for k in 1:b
+        @inbounds dest[k + 1] -= r_old * reg_coeffs[k] * dest[k]
+    end
+
+    # Step 2: Add new root (backward recurrence, k = b → 1)
+    for k in b:-1:1
+        @inbounds dest[k + 1] += r_new * reg_coeffs[k] * dest[k]
     end
 
     return

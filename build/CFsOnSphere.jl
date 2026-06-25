@@ -37,13 +37,13 @@ The function modifies accumulated_density in-place and returns nothing.
 Assumes θmesh is sorted in ascending order for correct bin assignment using searchsortedfirst.
 """
 function update_density!(θmesh::Vector{Float64}, θcurrent::Vector{Float64}, accumulated_density::Vector{Float64})
-    
+
     for θ in θcurrent
-        accumulated_density[searchsortedfirst(θmesh, θ)-1] += 1.0
+        accumulated_density[searchsortedfirst(θmesh, θ) - 1] += 1.0
     end
 
     return
-    
+
 end
 
 """
@@ -67,9 +67,9 @@ The bin indices are determined using searchsortedfirst on the mesh vectors.
 - The function modifies the accumulated_density matrix in-place
 """
 function update_density!(θmesh::Vector{Float64}, ϕmesh::Vector{Float64}, θcurrent::Vector{Float64}, ϕcurrent::Vector{Float64}, accumulated_density::Matrix{Float64})
-    
+
     for iter in eachindex(θcurrent)
-        accumulated_density[searchsortedfirst(θmesh, θcurrent[iter])-1, searchsortedfirst(ϕmesh, ϕcurrent[iter])-1] += 1.0
+        accumulated_density[searchsortedfirst(θmesh, θcurrent[iter]) - 1, searchsortedfirst(ϕmesh, ϕcurrent[iter]) - 1] += 1.0
     end
 
     return

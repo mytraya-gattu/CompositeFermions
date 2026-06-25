@@ -12,7 +12,7 @@ using StaticArrays
 using LinearAlgebra
 
 function u_v_generator(θ, ϕ)
-    
+
     return cos.(θ ./ 2) .* exp.(0.5im .* ϕ), sin.(θ ./ 2) .* exp.(-0.5im .* ϕ)
 
 end
@@ -58,7 +58,7 @@ mutable struct Ψproj
     p::Int64
     system_size::Int64
 
-    l_m_list::Vector{NTuple{2,Rational{Int64}}} ### This is a list of tuples of the form (L, Lz)
+    l_m_list::Vector{NTuple{2, Rational{Int64}}} ### This is a list of tuples of the form (L, Lz)
     Lmax::Rational{Int64}
     μ_list::Vector{Rational{Int64}}
     Lz_list::Vector{Rational{Int64}}
@@ -78,7 +78,7 @@ mutable struct Ψproj
     reg_coeffs::Vector{Float64}
 
     wigner_d_matrices::Matrix{ComplexF64}
-    wigner_D_matrices::Array{ComplexF64,3}
+    wigner_D_matrices::Array{ComplexF64, 3}
 
     jastrow_factor_log::ComplexF64
     slater_det::Matrix{ComplexF64}
@@ -126,7 +126,7 @@ mutable struct Ψparton
     p::Int64 ### number of ϕ1s..
     system_size::Int64
 
-    l_m_lists::Vector{Vector{NTuple{2,Rational{Int64}}}} ### This is a list of tuples of the form (L, Lz)
+    l_m_lists::Vector{Vector{NTuple{2, Rational{Int64}}}} ### This is a list of tuples of the form (L, Lz)
 
     max_JK::Int64
     μ_list::Vector{Rational{Int64}}
@@ -147,7 +147,7 @@ mutable struct Ψparton
     reg_coeffs::Vector{Float64}
 
     wigner_d_matrices::Matrix{ComplexF64}
-    wigner_D_matrices::Array{ComplexF64,3}
+    wigner_D_matrices::Array{ComplexF64, 3}
 
     jastrow_factor_log::ComplexF64
     slater_det::Matrix{ComplexF64} ### For ease, I will keep this as a 3D array. Basically append 0s at the end if there aren't enough rows.
@@ -169,25 +169,25 @@ Constructor function for Jain-Kamilla projected wavefunction on a sphere.
 
     Returns a `Ψproj` type object containing all necessary arrays and matrices for wavefunction calculations.
 """
-function Ψproj(Qstar::Rational{Int64}, p::Int64, system_size::Int64, l_m_list::Vector{NTuple{2,Rational{Int64}}})
-    
+function Ψproj(Qstar::Rational{Int64}, p::Int64, system_size::Int64, l_m_list::Vector{NTuple{2, Rational{Int64}}})
+
     Lmax = maximum(first, l_m_list)
 
-    fourier_matrix = zeros(ComplexF64, length(l_m_list), numerator(1 + Lmax-Qstar), numerator(1+2*Lmax))
+    fourier_matrix = zeros(ComplexF64, length(l_m_list), numerator(1 + Lmax - Qstar), numerator(1 + 2 * Lmax))
 
     Lgrid = unique(first.(l_m_list))
-    liters = [findall(x->x[1]==L, l_m_list) for L in Lgrid]
-    
+    liters = [findall(x -> x[1] == L, l_m_list) for L in Lgrid]
+
     for (Liter, L) in enumerate(Lgrid)
 
-        fourier_matrix[liters[Liter], begin:begin+numerator(L-Qstar), numerator(1-L+Lmax):1:numerator(1+L+Lmax)] .= generate_fourier_matrices(Qstar, system_size, L, last.(l_m_list[liters[Liter]]))
+        fourier_matrix[liters[Liter], begin:(begin + numerator(L - Qstar)), numerator(1 - L + Lmax):1:numerator(1 + L + Lmax)] .= generate_fourier_matrices(Qstar, system_size, L, last.(l_m_list[liters[Liter]]))
 
     end
 
-    fourier_tot_matrix = reshape(fourier_matrix, :, numerator(1+2*Lmax))
+    fourier_tot_matrix = reshape(fourier_matrix, :, numerator(1 + 2 * Lmax))
 
     Lz_list = last.(l_m_list)
-    
+
     μ_list = collect(-Lmax:1:Lmax)
 
     U = zeros(ComplexF64, system_size)
@@ -208,9 +208,9 @@ function Ψproj(Qstar::Rational{Int64}, p::Int64, system_size::Int64, l_m_list::
     wigner_D_matrices = zeros(ComplexF64, length(l_m_list), 1 + numerator(Lmax - Qstar), system_size)
 
     reg_coeffs = zeros(Float64, round(Int64, Lmax - Qstar))
-    
+
     for i in eachindex(reg_coeffs)
-        reg_coeffs[i] = (i/(system_size-i))
+        reg_coeffs[i] = (i / (system_size - i))
     end
 
     return Ψproj(Qstar, p, system_size, l_m_list, Lmax, μ_list, Lz_list, fourier_tot_matrix, U, V, exp_θ, exp_ϕ, dist_matrix, u_v_ratio_matrix, elementary_symmetric_polynomials, reg_coeffs, wigner_d_matrices, wigner_D_matrices, jastrow_factor_log, slater_det)
@@ -237,15 +237,15 @@ function Ψparton(Qstars::Vector{Rational{Int64}}, p::Int64, system_size::Int64,
     max_JK = typemin(Int64)
 
     Lmaxs = Vector{Rational{Int64}}()
-    
+
     for iter in eachindex(Qstars)
 
         Lmax = maximum(first, l_m_lists[iter])
         push!(Lmaxs, Lmax)
-        max_JK = max(max_JK, numerator(Lmax-Qstars[iter]))
+        max_JK = max(max_JK, numerator(Lmax - Qstars[iter]))
 
     end
-    
+
     μ_list = sort(unique(vcat([collect(-Lmax:1:Lmax) for Lmax in Lmaxs]...)))
 
     fourier_matrix = zeros(ComplexF64, sum(length, l_m_lists), max_JK + 1, length(μ_list))
@@ -256,20 +256,20 @@ function Ψparton(Qstars::Vector{Rational{Int64}}, p::Int64, system_size::Int64,
 
         l_m_list = l_m_lists[iter]
         Qstar = Qstars[iter]
-        
+
         Lgrid = unique(first.(l_m_list))
-        liters = [findall(x->x[1]==L, l_m_list) for L in Lgrid]
-        
+        liters = [findall(x -> x[1] == L, l_m_list) for L in Lgrid]
+
         for (Liter, L) in enumerate(Lgrid)
 
-            θ_iters = [findfirst(isequal(μ),μ_list) for μ in -L:1:L]
-    
-            fourier_matrix[tracker .+ liters[Liter], begin:begin+numerator(L-Qstar), θ_iters] .= generate_fourier_matrices(Qstar, system_size, L, last.(l_m_list[liters[Liter]]))
-    
+            θ_iters = [findfirst(isequal(μ), μ_list) for μ in -L:1:L]
+
+            fourier_matrix[tracker .+ liters[Liter], begin:(begin + numerator(L - Qstar)), θ_iters] .= generate_fourier_matrices(Qstar, system_size, L, last.(l_m_list[liters[Liter]]))
+
         end
-        
-        push!(trackers, 1 + tracker:tracker + length(l_m_list))
-        
+
+        push!(trackers, (1 + tracker):(tracker + length(l_m_list)))
+
         tracker += length(l_m_list)
     end
 
@@ -295,9 +295,9 @@ function Ψparton(Qstars::Vector{Rational{Int64}}, p::Int64, system_size::Int64,
     wigner_D_matrices = zeros(ComplexF64, sum(length, l_m_lists), (1 + max_JK), system_size)
 
     reg_coeffs = zeros(Float64, max_JK)
-    
+
     for i in eachindex(reg_coeffs)
-        reg_coeffs[i] = (i/(system_size-i))
+        reg_coeffs[i] = (i / (system_size - i))
     end
 
     return Ψparton(Qstars, p, system_size, l_m_lists, max_JK, μ_list, Lz_list, fourier_tot_matrix, U, V, exp_θ, exp_ϕ, dist_matrix, u_v_ratio_matrix, elementary_symmetric_polynomials, reg_coeffs, wigner_d_matrices, wigner_D_matrices, jastrow_factor_log, slater_det, trackers)
@@ -329,32 +329,32 @@ function update_wavefunction!(Ψ::Ψproj, θ::Vector{Float64}, ϕ::Vector{Float6
     δu = zero(ComplexF64)
     δv = zero(ComplexF64)
 
-    for i = 1:Ψ.system_size-1
-        for j = i+1:Ψ.system_size
+    for i in 1:(Ψ.system_size - 1)
+        for j in (i + 1):Ψ.system_size
 
             δu = conj(Ψ.U[i]) * Ψ.U[j] + conj(Ψ.V[i]) * Ψ.V[j]
             δv = Ψ.U[i] * Ψ.V[j] - Ψ.V[i] * Ψ.U[j]
 
-            Ψ.u_v_ratio_matrix[j-1, i] = δu / δv
+            Ψ.u_v_ratio_matrix[j - 1, i] = δu / δv
             Ψ.u_v_ratio_matrix[i, j] = -conj(δu) / δv
 
             Ψ.jastrow_factor_log += Ψ.p * log(δv)
 
-            Ψ.dist_matrix[j-1, i] = 2.0 * abs(δv)
-            Ψ.dist_matrix[i, j] = Ψ.dist_matrix[j-1, i]
+            Ψ.dist_matrix[j - 1, i] = 2.0 * abs(δv)
+            Ψ.dist_matrix[i, j] = Ψ.dist_matrix[j - 1, i]
 
         end
     end
 
     @simd for electron_iter in axes(Ψ.elementary_symmetric_polynomials, 2)
 
-        @inbounds @views get_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, electron_iter], Ψ.u_v_ratio_matrix[:, electron_iter], numerator(Ψ.Lmax-Ψ.Qstar), Ψ.reg_coeffs)
+        @inbounds @views get_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, electron_iter], Ψ.u_v_ratio_matrix[:, electron_iter], numerator(Ψ.Lmax - Ψ.Qstar), Ψ.reg_coeffs)
 
     end
 
     Ψ.wigner_d_matrices .= Ψ.fourier_tot_matrix * Ψ.exp_θ
     Ψ.wigner_D_matrices .= reshape(Ψ.wigner_d_matrices, size(Ψ.wigner_D_matrices))
-    
+
     @simd for iter in axes(Ψ.wigner_D_matrices, 3)
 
         @inbounds @views Ψ.wigner_D_matrices[:, :, iter] .*= Ψ.exp_ϕ[:, iter]
@@ -395,19 +395,19 @@ function update_wavefunction!(Ψ::Ψparton, θ::Vector{Float64}, ϕ::Vector{Floa
     δu = zero(ComplexF64)
     δv = zero(ComplexF64)
 
-    for i = 1:Ψ.system_size-1
-        for j = i+1:Ψ.system_size
+    for i in 1:(Ψ.system_size - 1)
+        for j in (i + 1):Ψ.system_size
 
             δu = conj(Ψ.U[i]) * Ψ.U[j] + conj(Ψ.V[i]) * Ψ.V[j]
             δv = Ψ.U[i] * Ψ.V[j] - Ψ.V[i] * Ψ.U[j]
 
-            Ψ.u_v_ratio_matrix[j-1, i] = δu / δv
+            Ψ.u_v_ratio_matrix[j - 1, i] = δu / δv
             Ψ.u_v_ratio_matrix[i, j] = -conj(δu) / δv
 
             Ψ.jastrow_factor_log += Ψ.p * log(δv)
 
-            Ψ.dist_matrix[j-1, i] = 2.0 * abs(δv)
-            Ψ.dist_matrix[i, j] = Ψ.dist_matrix[j-1, i]
+            Ψ.dist_matrix[j - 1, i] = 2.0 * abs(δv)
+            Ψ.dist_matrix[i, j] = Ψ.dist_matrix[j - 1, i]
 
         end
     end
@@ -420,7 +420,7 @@ function update_wavefunction!(Ψ::Ψparton, θ::Vector{Float64}, ϕ::Vector{Floa
 
     Ψ.wigner_d_matrices .= Ψ.fourier_tot_matrix * Ψ.exp_θ
     Ψ.wigner_D_matrices .= reshape(Ψ.wigner_d_matrices, size(Ψ.wigner_D_matrices))
-    
+
     @simd for iter in axes(Ψ.wigner_D_matrices, 3)
 
         @inbounds @views Ψ.wigner_D_matrices[:, :, iter] .*= Ψ.exp_ϕ[:, iter]
@@ -464,37 +464,56 @@ function update_wavefunction!(Ψ::Ψproj, θ::Float64, ϕ::Float64, iter::Int64)
 
     δu_new = zero(ComplexF64)
 
-    for i = 1:Ψ.system_size
+    jk_order = numerator(Ψ.Lmax - Ψ.Qstar)
+    use_incremental = 2 * jk_order < Ψ.system_size  # stable when reg_coeffs[k] = k/(N-k) < 1
+
+    for i in 1:Ψ.system_size
 
         if i < iter
 
             δv_old = Ψ.U[i] * Ψ.V[iter] - Ψ.V[i] * Ψ.U[iter]
-            δv_new = Ψ.U[i] * vnew -  Ψ.V[i] * unew
+            δv_new = Ψ.U[i] * vnew - Ψ.V[i] * unew
 
             δu_new = conj(Ψ.U[i]) * unew + conj(Ψ.V[i]) * vnew
 
-            Ψ.u_v_ratio_matrix[iter-1, i] = δu_new / δv_new
+            if use_incremental
+                r_old = Ψ.u_v_ratio_matrix[iter - 1, i]
+            end
+
+            Ψ.u_v_ratio_matrix[iter - 1, i] = δu_new / δv_new
             Ψ.u_v_ratio_matrix[i, iter] = -conj(δu_new) / δv_new
+
+            if use_incremental
+                @inbounds @views update_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, i], r_old, Ψ.u_v_ratio_matrix[iter - 1, i], jk_order, Ψ.reg_coeffs)
+            end
 
             Ψ.jastrow_factor_log += Ψ.p * log(δv_new / δv_old)
 
-            Ψ.dist_matrix[iter-1, i] = 2.0 * abs(δv_new)
-            Ψ.dist_matrix[i, iter] = Ψ.dist_matrix[iter-1, i]
+            Ψ.dist_matrix[iter - 1, i] = 2.0 * abs(δv_new)
+            Ψ.dist_matrix[i, iter] = Ψ.dist_matrix[iter - 1, i]
 
         elseif i > iter
 
             δv_old = -Ψ.U[i] * Ψ.V[iter] + Ψ.V[i] * Ψ.U[iter]
-            δv_new = -Ψ.U[i] * vnew +  Ψ.V[i] * unew
+            δv_new = -Ψ.U[i] * vnew + Ψ.V[i] * unew
 
             δu_new = (Ψ.U[i]) * conj(unew) + (Ψ.V[i]) * conj(vnew)
 
-            Ψ.u_v_ratio_matrix[i-1, iter] = δu_new / δv_new
+            if use_incremental
+                r_old = Ψ.u_v_ratio_matrix[iter, i]
+            end
+
+            Ψ.u_v_ratio_matrix[i - 1, iter] = δu_new / δv_new
             Ψ.u_v_ratio_matrix[iter, i] = -conj(δu_new) / δv_new
+
+            if use_incremental
+                @inbounds @views update_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, i], r_old, Ψ.u_v_ratio_matrix[iter, i], jk_order, Ψ.reg_coeffs)
+            end
 
             Ψ.jastrow_factor_log += Ψ.p * log(δv_new / δv_old)
 
-            Ψ.dist_matrix[i-1, iter] = 2.0 * abs(δv_new)
-            Ψ.dist_matrix[iter, i] = Ψ.dist_matrix[i-1, iter]
+            Ψ.dist_matrix[i - 1, iter] = 2.0 * abs(δv_new)
+            Ψ.dist_matrix[iter, i] = Ψ.dist_matrix[i - 1, iter]
 
         end
 
@@ -502,16 +521,20 @@ function update_wavefunction!(Ψ::Ψproj, θ::Float64, ϕ::Float64, iter::Int64)
 
     Ψ.U[iter], Ψ.V[iter] = unew, vnew
 
-    @simd for electron_iter in axes(Ψ.elementary_symmetric_polynomials, 2)
-
-        @inbounds @views get_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, electron_iter], Ψ.u_v_ratio_matrix[:, electron_iter], numerator(Ψ.Lmax-Ψ.Qstar), Ψ.reg_coeffs)
-
+    if use_incremental
+        # Only column iter needs full recompute (all its roots changed)
+        @inbounds @views get_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, iter], Ψ.u_v_ratio_matrix[:, iter], jk_order, Ψ.reg_coeffs)
+    else
+        # Full recompute for all columns (numerically safe for large jk_order)
+        @simd for electron_iter in axes(Ψ.elementary_symmetric_polynomials, 2)
+            @inbounds @views get_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, electron_iter], Ψ.u_v_ratio_matrix[:, electron_iter], jk_order, Ψ.reg_coeffs)
+        end
     end
 
     Ψ.wigner_d_matrices[:, iter] .= Ψ.fourier_tot_matrix * Ψ.exp_θ[:, iter]
-    
+
     @simd for j in axes(Ψ.wigner_D_matrices, 2)
-        @inbounds @views Ψ.wigner_D_matrices[:, j, iter] .= Ψ.wigner_d_matrices[1+size(Ψ.wigner_D_matrices, 1)*(j-1):size(Ψ.wigner_D_matrices, 1)*(j), iter]
+        @inbounds @views Ψ.wigner_D_matrices[:, j, iter] .= Ψ.wigner_d_matrices[(1 + size(Ψ.wigner_D_matrices, 1) * (j - 1)):(size(Ψ.wigner_D_matrices, 1) * (j)), iter]
     end
 
     Ψ.wigner_D_matrices[:, :, iter] .*= Ψ.exp_ϕ[:, iter]
@@ -552,37 +575,55 @@ function update_wavefunction!(Ψ::Ψparton, θ::Float64, ϕ::Float64, iter::Int6
 
     δu_new = zero(ComplexF64)
 
-    for i = 1:Ψ.system_size
+    use_incremental = 2 * Ψ.max_JK < Ψ.system_size  # stable when reg_coeffs[k] = k/(N-k) < 1
+
+    for i in 1:Ψ.system_size
 
         if i < iter
 
             δv_old = Ψ.U[i] * Ψ.V[iter] - Ψ.V[i] * Ψ.U[iter]
-            δv_new = Ψ.U[i] * vnew -  Ψ.V[i] * unew
+            δv_new = Ψ.U[i] * vnew - Ψ.V[i] * unew
 
             δu_new = conj(Ψ.U[i]) * unew + conj(Ψ.V[i]) * vnew
 
-            Ψ.u_v_ratio_matrix[iter-1, i] = δu_new / δv_new
+            if use_incremental
+                r_old = Ψ.u_v_ratio_matrix[iter - 1, i]
+            end
+
+            Ψ.u_v_ratio_matrix[iter - 1, i] = δu_new / δv_new
             Ψ.u_v_ratio_matrix[i, iter] = -conj(δu_new) / δv_new
+
+            if use_incremental
+                @inbounds @views update_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, i], r_old, Ψ.u_v_ratio_matrix[iter - 1, i], Ψ.max_JK, Ψ.reg_coeffs)
+            end
 
             Ψ.jastrow_factor_log += Ψ.p * log(δv_new / δv_old)
 
-            Ψ.dist_matrix[iter-1, i] = 2.0 * abs(δv_new)
-            Ψ.dist_matrix[i, iter] = Ψ.dist_matrix[iter-1, i]
+            Ψ.dist_matrix[iter - 1, i] = 2.0 * abs(δv_new)
+            Ψ.dist_matrix[i, iter] = Ψ.dist_matrix[iter - 1, i]
 
         elseif i > iter
 
             δv_old = -Ψ.U[i] * Ψ.V[iter] + Ψ.V[i] * Ψ.U[iter]
-            δv_new = -Ψ.U[i] * vnew +  Ψ.V[i] * unew
+            δv_new = -Ψ.U[i] * vnew + Ψ.V[i] * unew
 
             δu_new = (Ψ.U[i]) * conj(unew) + (Ψ.V[i]) * conj(vnew)
 
-            Ψ.u_v_ratio_matrix[i-1, iter] = δu_new / δv_new
+            if use_incremental
+                r_old = Ψ.u_v_ratio_matrix[iter, i]
+            end
+
+            Ψ.u_v_ratio_matrix[i - 1, iter] = δu_new / δv_new
             Ψ.u_v_ratio_matrix[iter, i] = -conj(δu_new) / δv_new
+
+            if use_incremental
+                @inbounds @views update_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, i], r_old, Ψ.u_v_ratio_matrix[iter, i], Ψ.max_JK, Ψ.reg_coeffs)
+            end
 
             Ψ.jastrow_factor_log += Ψ.p * log(δv_new / δv_old)
 
-            Ψ.dist_matrix[i-1, iter] = 2.0 * abs(δv_new)
-            Ψ.dist_matrix[iter, i] = Ψ.dist_matrix[i-1, iter]
+            Ψ.dist_matrix[i - 1, iter] = 2.0 * abs(δv_new)
+            Ψ.dist_matrix[iter, i] = Ψ.dist_matrix[i - 1, iter]
 
         end
 
@@ -590,16 +631,20 @@ function update_wavefunction!(Ψ::Ψparton, θ::Float64, ϕ::Float64, iter::Int6
 
     Ψ.U[iter], Ψ.V[iter] = unew, vnew
 
-    @simd for electron_iter in axes(Ψ.elementary_symmetric_polynomials, 2)
-
-        @inbounds @views get_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, electron_iter], Ψ.u_v_ratio_matrix[:, electron_iter], Ψ.max_JK, Ψ.reg_coeffs)
-
+    if use_incremental
+        # Only column iter needs full recompute (all its roots changed)
+        @inbounds @views get_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, iter], Ψ.u_v_ratio_matrix[:, iter], Ψ.max_JK, Ψ.reg_coeffs)
+    else
+        # Full recompute for all columns (numerically safe for large jk_order)
+        @simd for electron_iter in axes(Ψ.elementary_symmetric_polynomials, 2)
+            @inbounds @views get_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, electron_iter], Ψ.u_v_ratio_matrix[:, electron_iter], Ψ.max_JK, Ψ.reg_coeffs)
+        end
     end
 
     Ψ.wigner_d_matrices[:, iter] .= Ψ.fourier_tot_matrix * Ψ.exp_θ[:, iter]
-    
+
     @simd for j in axes(Ψ.wigner_D_matrices, 2)
-        @inbounds @views Ψ.wigner_D_matrices[:, j, iter] .= Ψ.wigner_d_matrices[1+size(Ψ.wigner_D_matrices, 1)*(j-1):size(Ψ.wigner_D_matrices, 1)*(j), iter]
+        @inbounds @views Ψ.wigner_D_matrices[:, j, iter] .= Ψ.wigner_d_matrices[(1 + size(Ψ.wigner_D_matrices, 1) * (j - 1)):(size(Ψ.wigner_D_matrices, 1) * (j)), iter]
     end ### This is because I cannot allocate and reshape at the same time.
 
     Ψ.wigner_D_matrices[:, :, iter] .*= Ψ.exp_ϕ[:, iter]
@@ -612,7 +657,6 @@ function update_wavefunction!(Ψ::Ψparton, θ::Float64, ϕ::Float64, iter::Int6
 
     return
 end
-
 
 
 """
@@ -745,7 +789,7 @@ Returns parameters for ARM scheme for step size adapation to maintain acceptance
 function arm_parameters(ideal_acceptance_ratio::Float64, r::Float64)
     a = 1.0
     b = 0.0
-    for i = 1:1000
+    for i in 1:1000
         c = (a * ideal_acceptance_ratio + b)^r
         a = (a * ideal_acceptance_ratio + b)^(1 / r) - c
         b = c
@@ -777,7 +821,7 @@ function proposal(RNG, θcurrent::Float64, ϕcurrent::Float64, σ::Float64)
     x = SA[v[2], v[3], v[4]]
 
     sph = SphericalFromCartesian()(x)
-    return pi/2-sph.ϕ, sph.θ
+    return pi / 2 - sph.ϕ, sph.θ
 end
 
 mutable struct ΨoneLL
@@ -816,15 +860,15 @@ function update_wavefunction!(Ψ::ΨoneLL, θ::Vector{Float64}, ϕ::Vector{Float
     δu = zero(ComplexF64)
     δv = zero(ComplexF64)
 
-    for i = 1:Ψ.system_size-1
-        for j = i+1:Ψ.system_size
+    for i in 1:(Ψ.system_size - 1)
+        for j in (i + 1):Ψ.system_size
 
             δv = Ψ.U[i] * Ψ.V[j] - Ψ.V[i] * Ψ.U[j]
 
             Ψ.jastrow_factor_log += Ψ.p * log(δv)
 
-            Ψ.dist_matrix[j-1, i] = 2.0 * abs(δv)
-            Ψ.dist_matrix[i, j] = Ψ.dist_matrix[j-1, i]
+            Ψ.dist_matrix[j - 1, i] = 2.0 * abs(δv)
+            Ψ.dist_matrix[i, j] = Ψ.dist_matrix[j - 1, i]
 
         end
     end
@@ -839,27 +883,27 @@ function update_wavefunction!(Ψ::ΨoneLL, θ::Float64, ϕ::Float64, iter::Int64
     δv_old = zero(ComplexF64)
     δv_new = zero(ComplexF64)
 
-    for i = 1:Ψ.system_size
+    for i in 1:Ψ.system_size
 
         if i < iter
 
             δv_old = Ψ.U[i] * Ψ.V[iter] - Ψ.V[i] * Ψ.U[iter]
-            δv_new = Ψ.U[i] * vnew -  Ψ.V[i] * unew
+            δv_new = Ψ.U[i] * vnew - Ψ.V[i] * unew
 
             Ψ.jastrow_factor_log += Ψ.p * log(δv_new / δv_old)
 
-            Ψ.dist_matrix[iter-1, i] = 2.0 * abs(δv_new)
-            Ψ.dist_matrix[i, iter] = Ψ.dist_matrix[iter-1, i]
+            Ψ.dist_matrix[iter - 1, i] = 2.0 * abs(δv_new)
+            Ψ.dist_matrix[i, iter] = Ψ.dist_matrix[iter - 1, i]
 
         elseif i > iter
 
             δv_old = -Ψ.U[i] * Ψ.V[iter] + Ψ.V[i] * Ψ.U[iter]
-            δv_new = -Ψ.U[i] * vnew +  Ψ.V[i] * unew
+            δv_new = -Ψ.U[i] * vnew + Ψ.V[i] * unew
 
             Ψ.jastrow_factor_log += Ψ.p * log(δv_new / δv_old)
 
-            Ψ.dist_matrix[i-1, iter] = 2.0 * abs(δv_new)
-            Ψ.dist_matrix[iter, i] = Ψ.dist_matrix[i-1, iter]
+            Ψ.dist_matrix[i - 1, iter] = 2.0 * abs(δv_new)
+            Ψ.dist_matrix[iter, i] = Ψ.dist_matrix[i - 1, iter]
 
         end
 
@@ -925,8 +969,8 @@ updates one particle position at a time. The step size is tuned during
 thermalization to achieve a target acceptance rate of 50%.
 """
 function gibbs_thermalization!(RNG, Ψcurrent::T, Ψnext::T, θcurrent::Vector{Float64}, ϕcurrent::Vector{Float64}, θnext::Vector{Float64}, ϕnext::Vector{Float64}, σinit::Float64, logpdf::Function, num_thermalization::Int64) where {T <: Union{Ψproj, Ψparton, ΨoneLL}}
-    
-    acceptance_target::Float64 = 0.50 ### Gibbs sampling.
+
+    acceptance_target::Float64 = 0.5 ### Gibbs sampling.
     a::Float64, b::Float64 = arm_parameters(acceptance_target, 3.0)
 
     num_samples_accepted_thermalization::Int64 = 0
@@ -951,7 +995,7 @@ function gibbs_thermalization!(RNG, Ψcurrent::T, Ψnext::T, θcurrent::Vector{F
         update_wavefunction!(Ψnext, θnext[sampling_iter], ϕnext[sampling_iter], sampling_iter)
 
         logpdf_next = logpdf(Ψnext)
-       
+
         if logpdf_next - logpdf_current >= log(rand())
 
             θcurrent[sampling_iter] = θnext[sampling_iter]
@@ -973,8 +1017,8 @@ function gibbs_thermalization!(RNG, Ψcurrent::T, Ψnext::T, θcurrent::Vector{F
         end
 
         if monte_carlo_iter ∈ tuning_schedule
-            
-            δ = arm_scale_factor(num_samples_accepted_thermalization/monte_carlo_iter, acceptance_target, a, b)
+
+            δ = arm_scale_factor(num_samples_accepted_thermalization / monte_carlo_iter, acceptance_target, a, b)
             σ *= δ
         end
 
@@ -982,8 +1026,8 @@ function gibbs_thermalization!(RNG, Ψcurrent::T, Ψnext::T, θcurrent::Vector{F
 
     end
 
-    δt_therm::Float64 = time()-t0
-    return sampling_iter, σ, δt_therm, num_samples_accepted_thermalization/num_thermalization
+    δt_therm::Float64 = time() - t0
+    return sampling_iter, σ, δt_therm, num_samples_accepted_thermalization / num_thermalization
 end
 
 end

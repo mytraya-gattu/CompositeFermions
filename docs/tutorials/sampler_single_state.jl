@@ -22,11 +22,11 @@ function gibbs_sampler(filename::String, Qstar::Rational{Int64}, l_m_list::Vecto
 
     logpdf(ψ::Ψproj) = 2.0 * real(logdet(ψ.slater_det) + ψ.jastrow_factor_log)
 
-    σ = pi/sqrt(12.0)
+    σ = pi / sqrt(12.0)
 
     sampling_iter, σ, δt_therm, thermalization_acceptance_rate = gibbs_thermalization!(RNG, Ψcurrent, Ψnext, θcurrent, ϕcurrent, θnext, ϕnext, σ, logpdf, num_thermalization)
 
-    data = Dict("theta vector"=>θcurrent, "phi vector"=>ϕcurrent, "thermalization acceptance rate"=>thermalization_acceptance_rate, "number of thermalization steps"=>num_thermalization, "thermalization duration"=>δt_therm, "step size"=>σ)
+    data = Dict("theta vector" => θcurrent, "phi vector" => ϕcurrent, "thermalization acceptance rate" => thermalization_acceptance_rate, "number of thermalization steps" => num_thermalization, "thermalization duration" => δt_therm, "step size" => σ)
 
     save(filename, data)
 
@@ -42,22 +42,22 @@ function gibbs_sampler(filename::String, Qstar::Rational{Int64}, l_m_list::Vecto
 
     dr = rgrid[2] - rgrid[1]
 
-    accumulated_pair_density = zeros(Float64, length(rgrid)-1)
+    accumulated_pair_density = zeros(Float64, length(rgrid) - 1)
 
-    current_distance_distribution = zeros(Float64, length(rgrid)-1)
+    current_distance_distribution = zeros(Float64, length(rgrid) - 1)
 
-    for i in 1:system_size-1
-        for j in i+1:system_size
-            r = Ψcurrent.dist_matrix[j-1, i]
-            current_distance_distribution[ceil(Int64, r/dr)] += 1.0
+    for i in 1:(system_size - 1)
+        for j in (i + 1):system_size
+            r = Ψcurrent.dist_matrix[j - 1, i]
+            current_distance_distribution[ceil(Int64, r / dr)] += 1.0
         end
     end
 
-    θmesh = map(x->acos(x), LinRange(1.0, -1.0, 500))
+    θmesh = map(x -> acos(x), LinRange(1.0, -1.0, 500))
 
-    Agrid = 2.0 * pi .* (cos.(θmesh[begin:end-1]) .- cos.(θmesh[begin+1:end]))
+    Agrid = 2.0 * pi .* (cos.(θmesh[begin:(end - 1)]) .- cos.(θmesh[(begin + 1):end]))
 
-    accumulated_density = zeros(Float64, length(θmesh)-1)
+    accumulated_density = zeros(Float64, length(θmesh) - 1)
 
     t0 = time()
 
@@ -71,7 +71,7 @@ function gibbs_sampler(filename::String, Qstar::Rational{Int64}, l_m_list::Vecto
 
         if logpdf_next - logpdf_current >= log(rand())
 
-            for i in 1:system_size-1
+            for i in 1:(system_size - 1)
                 @inbounds current_distance_distribution[ceil(Int64, Ψnext.dist_matrix[i, sampling_iter] / dr)] += 1.0
                 @inbounds current_distance_distribution[ceil(Int64, Ψcurrent.dist_matrix[i, sampling_iter] / dr)] -= 1.0
             end
@@ -103,12 +103,12 @@ function gibbs_sampler(filename::String, Qstar::Rational{Int64}, l_m_list::Vecto
         if monte_carlo_iter == num_steps || mod(monte_carlo_iter, 5 * 10^5) == 0
 
             data["number of steps"] = monte_carlo_iter
-            data["acceptance rate"] = num_samples_accepted/monte_carlo_iter
+            data["acceptance rate"] = num_samples_accepted / monte_carlo_iter
             data["monte carlo duration"] = time() - t0
             data["pair densities"] = accumulated_pair_density ./ monte_carlo_iter
-            data["r grid"] = 0.50 .* (rgrid[1:end-1] .+ rgrid[2:end])
+            data["r grid"] = 0.5 .* (rgrid[1:(end - 1)] .+ rgrid[2:end])
             data["density"] = accumulated_density ./ monte_carlo_iter ./ Agrid
-            data["theta grid"] = 0.50 .* (θmesh[1:end-1] .+ θmesh[2:end])
+            data["theta grid"] = 0.5 .* (θmesh[1:(end - 1)] .+ θmesh[2:end])
 
             save(filename, data)
 
@@ -122,10 +122,10 @@ end
 
 function sample_cf_gs(folder_name::String, chain_number::Int64, N::Int64, n::Int64, p::Int64, num_thermalization::Int64 = 5 * 10^5, num_steps::Int64 = 10^6)
 
-    Qstar = (N//n-n)//2
-    l_m_list = [(L, Lz) for L in abs(Qstar):1:(abs(Qstar)+abs(n)-1) for Lz in -L:1:L]
+    Qstar = (N // n - n) // 2
+    l_m_list = [(L, Lz) for L in abs(Qstar):1:(abs(Qstar) + abs(n) - 1) for Lz in -L:1:L]
 
-    filename = joinpath(folder_name, "data_$(N)_particles_$(n)_$(2*n*p+1)_filling_factor_$(chain_number)_chain_number.jld2")
+    filename = joinpath(folder_name, "data_$(N)_particles_$(n)_$(2 * n * p + 1)_filling_factor_$(chain_number)_chain_number.jld2")
 
     gibbs_sampler(filename, Qstar, l_m_list, p, num_thermalization, num_steps)
 
@@ -135,12 +135,12 @@ end
 
 function sample_cf_qh(folder_name::String, chain_number::Int64, N::Int64, n::Int64, p::Int64, num_thermalization::Int64 = 5 * 10^5, num_steps::Int64 = 10^6)
 
-    Qstar = (N//n-n)//2
+    Qstar = (N // n - n) // 2
     Lqh = abs(Qstar) + abs(n) - 1
 
-    l_m_list = [(L, Lz) for L in abs(Qstar):1:(abs(Qstar)+abs(n)-1) for Lz in -L:1:L if !(L == Lqh && Lz == Lqh)]
+    l_m_list = [(L, Lz) for L in abs(Qstar):1:(abs(Qstar) + abs(n) - 1) for Lz in -L:1:L if !(L == Lqh && Lz == Lqh)]
 
-    filename = joinpath(folder_name, "data_$(N)_particles_$(n)_$(2*n*p+1)_filling_factor_$(chain_number)_chain_number.jld2")
+    filename = joinpath(folder_name, "data_$(N)_particles_$(n)_$(2 * n * p + 1)_filling_factor_$(chain_number)_chain_number.jld2")
 
     gibbs_sampler(filename, Qstar, l_m_list, p, num_thermalization, num_steps)
 
@@ -150,13 +150,13 @@ end
 
 function sample_cf_qp(folder_name::String, chain_number::Int64, N::Int64, n::Int64, p::Int64, num_thermalization::Int64 = 5 * 10^5, num_steps::Int64 = 10^6)
 
-    Qstar = (N//n-n)//2
+    Qstar = (N // n - n) // 2
     Lqp = abs(Qstar) + abs(n)
 
-    l_m_list = [(L, Lz) for L in abs(Qstar):1:(abs(Qstar)+abs(n)-1) for Lz in -L:1:L]
+    l_m_list = [(L, Lz) for L in abs(Qstar):1:(abs(Qstar) + abs(n) - 1) for Lz in -L:1:L]
     push!(l_m_list, (Lqp, Lqp))
 
-    filename = joinpath(folder_name, "data_$(N)_particles_$(n)_$(2*n*p+1)_filling_factor_$(chain_number)_chain_number.jld2")
+    filename = joinpath(folder_name, "data_$(N)_particles_$(n)_$(2 * n * p + 1)_filling_factor_$(chain_number)_chain_number.jld2")
     gibbs_sampler(filename, Qstar, l_m_list, p, num_thermalization, num_steps)
 
     return

@@ -16,18 +16,18 @@ function calculate_j_y_eigenstates(l::Rational)
 
     j_y_in_j_z_basis = zeros(ComplexF64, dim_j, dim_j)
 
-    for m = -l:l-1
+    for m in -l:(l - 1)
         miter = round(Int64, m + l + 1)
-        j_y_in_j_z_basis[miter+1, miter] = sqrt(l * (l + 1) - m * (m + 1)) / (2.0im)
+        j_y_in_j_z_basis[miter + 1, miter] = sqrt(l * (l + 1) - m * (m + 1)) / (2.0im)
     end
 
-    for m = -l+1:l
+    for m in (-l + 1):l
         miter = round(Int64, m + l + 1)
-        j_y_in_j_z_basis[miter-1, miter] = -sqrt(l * (l + 1) - m * (m - 1)) / (2.0im)
+        j_y_in_j_z_basis[miter - 1, miter] = -sqrt(l * (l + 1) - m * (m - 1)) / (2.0im)
     end
 
     jy_eigvals, jy_eigvecs = eigen(j_y_in_j_z_basis)
-    ans_dict = Dict{NTuple{3,Rational{Int64}},ComplexF64}()
+    ans_dict = Dict{NTuple{3, Rational{Int64}}, ComplexF64}()
     for μ in collect(-l:1:l)
 
         for m1 in collect(-l:1:l)
