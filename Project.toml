@@ -1,17 +1,13 @@
 name = "CFsOnSphere"
 uuid = "374fd253-0018-49f1-a6f5-84acbe33a8d6"
-authors = ["LordThunder333 <mvg6042@psu.edu>"]
 version = "0.1.0"
+authors = ["LordThunder333 <mvg6042@psu.edu>"]
 
 [deps]
 Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
-DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
-FunctionZeros = "b21f74c0-b399-568f-9643-d20f4fa2c814"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
-RegularizationTools = "29dad682-9a27-4bc3-9c72-016788665182"
 Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
