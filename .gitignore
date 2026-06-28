@@ -22,3 +22,10 @@ docs/site/
 # committed for packages, but should be committed for applications that require a static
 # environment.
 Manifest.toml
+
+# LaTeX build artifacts (MANUAL.tex, derivation_jktype.tex)
+/latex_build/
+*.aux
+*.toc
+*.out
+*.synctex.gz

@@ -1,0 +1,7 @@
+# CMake build trees
+build/
+build-*/
+cmake-build-*/
+
+# Sampler output written to the cpp/ working dir (reference CSVs live in reference/)
+/*.csv

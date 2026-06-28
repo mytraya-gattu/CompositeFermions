@@ -1,8 +1,0 @@
-/Users/aragorn/Documents/CompositeFermions/cpp/build/CMakeFiles/test_cfsonsphere.dir
-/Users/aragorn/Documents/CompositeFermions/cpp/build/CMakeFiles/test_reference.dir
-/Users/aragorn/Documents/CompositeFermions/cpp/build/CMakeFiles/test_logpsi.dir
-/Users/aragorn/Documents/CompositeFermions/cpp/build/CMakeFiles/sampler_single_state.dir
-/Users/aragorn/Documents/CompositeFermions/cpp/build/CMakeFiles/sampler_unprojected.dir
-/Users/aragorn/Documents/CompositeFermions/cpp/build/CMakeFiles/test.dir
-/Users/aragorn/Documents/CompositeFermions/cpp/build/CMakeFiles/edit_cache.dir
-/Users/aragorn/Documents/CompositeFermions/cpp/build/CMakeFiles/rebuild_cache.dir
