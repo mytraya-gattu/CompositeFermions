@@ -1,4 +1,4 @@
-# Large cross-check: for many systems (sizes × Λ-level fillings × jk_type × proj/unproj),
+# Large cross-check: for many systems (sizes × Λ-level fillings × proj/unproj),
 # generate K random configurations and dump log Ψ = logdet(slater_det) + jastrow_factor_log.
 # Configs are written to CSV and read verbatim by the C++ test, so the comparison is purely
 # numerical. Run from repo root:  julia +lts --project=. cpp/reference/dump_logpsi.jl
@@ -9,20 +9,20 @@ using LinearAlgebra
 const OUT = @__DIR__
 const K = 1000   # configurations per system
 
-# (tag, kind, N, n, p, jk_type)
+# (tag, kind, N, n, p)
 const SYSTEMS = [
-    ("p1_4_1",  "proj",   4, 1, 1, 1),
-    ("p1_10_2", "proj",  10, 2, 1, 1),
-    ("p1_9_3",  "proj",   9, 3, 1, 1),
-    ("p1_16_4", "proj",  16, 4, 1, 1),
-    ("p1_20_2", "proj",  20, 2, 1, 1),
-    ("p1_32_4", "proj",  32, 4, 1, 1),
-    ("p2_10_2", "proj",  10, 2, 2, 2),
-    ("p2_9_3",  "proj",   9, 3, 2, 2),
-    ("p2_16_4", "proj",  16, 4, 1, 2),
-    ("u_9_3",   "unproj", 9, 3, 1, 1),
-    ("u_16_4",  "unproj",16, 4, 1, 1),
-    ("u_25_5",  "unproj",25, 5, 1, 1),
+    ("p1_4_1",  "proj",   4, 1, 1),
+    ("p1_10_2", "proj",  10, 2, 1),
+    ("p1_9_3",  "proj",   9, 3, 1),
+    ("p1_16_4", "proj",  16, 4, 1),
+    ("p1_20_2", "proj",  20, 2, 1),
+    ("p1_32_4", "proj",  32, 4, 1),
+    ("p2_10_2", "proj",  10, 2, 2),
+    ("p2_9_3",  "proj",   9, 3, 2),
+    ("p2_16_4", "proj",  16, 4, 4),
+    ("u_9_3",   "unproj", 9, 3, 1),
+    ("u_16_4",  "unproj",16, 4, 1),
+    ("u_25_5",  "unproj",25, 5, 1),
 ]
 
 function build_lm(N, n)
@@ -33,16 +33,16 @@ end
 
 # manifest
 open(joinpath(OUT, "logpsi_systems.csv"), "w") do io
-    for (tag, kind, N, n, p, jk) in SYSTEMS
-        println(io, "$(tag) $(kind) $(N) $(n) $(p) $(jk) $(K)")
+    for (tag, kind, N, n, p) in SYSTEMS
+        println(io, "$(tag) $(kind) $(N) $(n) $(p) $(K)")
     end
 end
 
 tim_io = open(joinpath(OUT, "timing_julia.csv"), "w")
-for (si, (tag, kind, N, n, p, jk)) in enumerate(SYSTEMS)
+for (si, (tag, kind, N, n, p)) in enumerate(SYSTEMS)
     Qstar, lm = build_lm(N, n)
     Nsys = length(lm)
-    ψ = kind == "proj" ? Ψproj(Qstar, p, Nsys, lm; jk_type=jk) : Ψunproj(Qstar, p, Nsys, lm)
+    ψ = kind == "proj" ? Ψproj(Qstar, p, Nsys, lm) : Ψunproj(Qstar, p, Nsys, lm)
 
     rng = MersenneTwister(1000 + si)
     configs = [rand_θ_ϕ_gen(rng, Nsys) for _ in 1:K]

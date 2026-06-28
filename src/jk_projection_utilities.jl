@@ -23,7 +23,7 @@ The Jain-Kamilla projection coefficient `N^L_{m,Q*,Q1}` (see the manuscript),
     N^L_{m,Q*,Q1} = C(2Q1, L-Q*) C(L-Q*, m-Q*) / C(2Q1+L+Q*+1, L-Q*)
                     · √[ (2L+1)/4π · C(2L, L+Q*) / C(2L, L+m) ],
 
-with `Q1 = jk_type·(N-1)/2`. Here `√(2L+1)/4π` is supplied separately in
+with `Q1 = (N-1)/2`. Here `√(2L+1)/4π` is supplied separately in
 [`generate_fourier_matrices`](@ref).
 """
 function projection_coeff(L, Qstar, Q1, m)
@@ -33,24 +33,22 @@ function projection_coeff(L, Qstar, Q1, m)
 end
 
 """
-    generate_fourier_matrices(Qstar, N, L, Lz_list; jk_type::Int = 1)
+    generate_fourier_matrices(Qstar, N, L, Lz_list)
 
 Build the Fourier-coefficient matrix for the Jain-Kamilla projection at total angular
 momentum `L`, effective monopole strength `Qstar`, and the requested `Lz_list`.
 
-`jk_type` selects the power of the Jastrow factor `Jᵢ = ∏_{j≠i}(uᵢvⱼ - uⱼvᵢ)` that is
-LLL-projected together with the monopole harmonic: the projected orbital is
-`[P_LLL Y_{Q*,L,M} Jᵢ^{jk_type}] / Jᵢ^{jk_type}`. Correspondingly the JK angular momentum
-is `Q1 = jk_type·(N-1)/2` (so `2Q1 = jk_type·(N-1)` is the number of multiplicity-weighted
-Jastrow roots), which enters the binomials of [`projection_coeff`](@ref). `jk_type = 1`
-reproduces the standard JK projection.
+The JK projection binds a single vortex pair into each orbital, `Jᵢ = ∏_{j≠i}(uᵢvⱼ - uⱼvᵢ)`,
+so the projected orbital is `[P_LLL Y_{Q*,L,M} Jᵢ] / Jᵢ` and the JK angular momentum is
+`Q1 = (N-1)/2` (so `2Q1 = N-1` is the number of Jastrow roots), which enters the binomials of
+[`projection_coeff`](@ref).
 """
-function generate_fourier_matrices(Qstar, N, L, Lz_list; jk_type::Int = 1)
+function generate_fourier_matrices(Qstar, N, L, Lz_list)
 
     @assert denominator(2 * L) == 1 && L ≥ abs(Qstar) "Invalid angular momentum."
     wigner_d_fourier_coeffecients = calculate_j_y_eigenstates(L)
 
-    Q1 = jk_type * (N - 1) // 2
+    Q1 = (N - 1) // 2
 
     fourier_matrix = zeros(ComplexF64, length(Lz_list), numerator(1 + L - Qstar), numerator(2 * L + 1))
 

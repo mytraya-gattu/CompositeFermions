@@ -29,8 +29,8 @@ inline double projection_coeff(int two_L, int two_Qstar, int two_Q1, int two_m) 
 inline void fill_fourier_block(Eigen::MatrixXcd& fourier_tot, int norb, int two_Lmax,
                                int two_Qstar, int N, int two_L,
                                const std::vector<int>& orbital_indices,
-                               const std::vector<int>& two_Lz_vals, int jk_type) {
-    const int two_Q1 = jk_type * (N - 1);
+                               const std::vector<int>& two_Lz_vals) {
+    const int two_Q1 = N - 1;
     const double normL = std::sqrt((two_L + 1) / (4.0 * M_PI));
     const int mu_offset = (two_Lmax - two_L) / 2;  // first global μ column for this L
 

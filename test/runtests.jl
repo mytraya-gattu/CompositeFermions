@@ -60,19 +60,50 @@ using LinearAlgebra
         @test length(lmp) == 10
     end
 
-    @testset "ESP multiplicity branches" begin
-        rng = MersenneTwister(1)
-        roots = randn(rng, ComplexF64, 12)
-        b = 8
-        for mult in (1, 2, 3, 4)
-            Npart = 13
-            reg = [i/(mult*(Npart-1) - i + 1) for i in 1:b]
-            dest = zeros(ComplexF64, b+1)
-            get_symmetric_polynomials!(dest, roots, b, reg; mult=mult)
-            ref = zeros(ComplexF64, b+1)
-            get_symmetric_polynomials!(ref, repeat(roots, inner=mult), b, reg; mult=1)
-            @test maximum(abs.(dest .- ref)) < 1e-9
+    @testset "ESP all orders vs ground truth" begin
+        # Ground truth: coefficients of ∏_i (1 + r_i x) by direct convolution.
+        # g[k+1] = e_k (degree-k elementary symmetric polynomial of the roots).
+        groundtruth(roots) = begin
+            poly = ComplexF64[1.0]
+            for r in roots
+                nxt = zeros(ComplexF64, length(poly)+1)
+                for j in 1:length(poly)
+                    nxt[j] += poly[j]; nxt[j+1] += r*poly[j]
+                end
+                poly = nxt
+            end
+            poly
         end
+        relerr(a, c) = abs(a - c) / max(abs(c), 1e-300)
+        maxun = 0.0; maxreg = 0.0
+        for M in (1, 2, 3, 5, 8)
+            rng = MersenneTwister(100M)
+            roots = [complex(randn(rng), randn(rng)) for _ in 1:M]
+            g = groundtruth(roots)              # degrees 0 .. M
+            Np = M + 1
+            for bb in 0:M                        # every order, incl. b=0,1 special cases
+                dest = zeros(ComplexF64, bb+1)
+                get_symmetric_polynomials!(dest, roots, bb)
+                for k in 0:bb; maxun = max(maxun, relerr(dest[k+1], g[k+1])); end
+                reg = [i/((Np-1) - i + 1) for i in 1:max(bb,1)]
+                destr = zeros(ComplexF64, bb+1)
+                get_symmetric_polynomials!(destr, roots, bb, reg)
+                acc = 1.0
+                for k in 0:bb
+                    if k >= 1; acc *= reg[k]; end
+                    maxreg = max(maxreg, relerr(destr[k+1], g[k+1]*acc))
+                end
+            end
+        end
+        @test maxun < 1e-10
+        @test maxreg < 1e-10
+        # degrees beyond N-1 must be exactly zero
+        rng = MersenneTwister(7); M = 8
+        roots = [complex(randn(rng), randn(rng)) for _ in 1:M]
+        bb = M + 5
+        dest = zeros(ComplexF64, bb+1)
+        get_symmetric_polynomials!(dest, roots, bb)
+        @test all(dest[M+2:end] .== 0)
     end
 
     @testset "proposal convention + isotropy" begin
@@ -180,22 +211,15 @@ using LinearAlgebra
         @test maximum(abs.(a .- inv(Sfull)[end, :])) < 1e-9
     end
 
-    @testset "jk_type generalization (Ψproj)" begin
+    @testset "Ψproj single-bound-pair normalization" begin
         rng = MersenneTwister(5)
-        N, n, p = 10, 2, 2
+        N, n, p = 10, 2, 4   # ν = 2/9 via outer Jastrow p = 2·p̃ (p̃ = 2)
         Qstar, l_m_list = cf_ground_state_lm(N, n, p)
-        ψ = Ψproj(Qstar, p, N, l_m_list; jk_type=2)
-        @test ψ.jk_type == 2
-        @test ψ.reg_coeffs[1] ≈ 1/(2*(N-1))
+        ψ = Ψproj(Qstar, p, N, l_m_list)
+        @test ψ.reg_coeffs[1] ≈ 1/(N-1)   # 1/C(N-1, 1), single bound vortex pair
         θ, ϕ = rand_θ_ϕ_gen(rng, N)
         update_wavefunction!(ψ, θ, ϕ)
         @test isfinite(real(logdet(ψ.slater_det)))
-        # full-vs-incremental consistency at jk_type=2
-        ψ2 = Ψproj(Qstar, p, N, l_m_list; jk_type=2); update_wavefunction!(ψ2, θ, ϕ)
-        for i in 1:N
-            update_wavefunction!(ψ2, θ[i], ϕ[i], i)
-        end
-        @test maximum(abs.(ψ.slater_det .- ψ2.slater_det)) < 1e-9
     end
 
 end

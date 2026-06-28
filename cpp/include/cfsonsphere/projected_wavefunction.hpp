@@ -20,7 +20,6 @@ namespace cfs {
 struct PsiProj {
     int two_Qstar;
     int p;
-    int jk_type;
     int N;            // system size
     LMList l_m_list;  // (two_L, two_Lz) per orbital
     int two_Lmax;
@@ -43,8 +42,8 @@ struct PsiProj {
     cdouble jastrow_factor_log;
     Eigen::MatrixXcd slater_det;   // num_orbitals × N
 
-    PsiProj(int two_Qstar_, int p_, int N_, const LMList& l_m_list_, int jk_type_ = 1)
-        : two_Qstar(two_Qstar_), p(p_), jk_type(jk_type_), N(N_), l_m_list(l_m_list_) {
+    PsiProj(int two_Qstar_, int p_, int N_, const LMList& l_m_list_)
+        : two_Qstar(two_Qstar_), p(p_), N(N_), l_m_list(l_m_list_) {
         two_Lmax = 0;
         for (auto& lm : l_m_list) two_Lmax = std::max(two_Lmax, lm.first);
         num_orbitals = static_cast<int>(l_m_list.size());
@@ -66,7 +65,7 @@ struct PsiProj {
                     lzs.push_back(l_m_list[o].second);
                 }
             fill_fourier_block(fourier_tot, num_orbitals, two_Lmax, two_Qstar, N, two_L, idxs,
-                               lzs, jk_type);
+                               lzs);
         }
 
         U = Eigen::VectorXcd::Zero(N);
@@ -83,7 +82,7 @@ struct PsiProj {
 
         reg_coeffs = Eigen::VectorXd::Zero(b);
         for (int i = 1; i <= b; ++i)
-            reg_coeffs(i - 1) = static_cast<double>(i) / (jk_type * (N - 1) - i + 1);
+            reg_coeffs(i - 1) = static_cast<double>(i) / ((N - 1) - i + 1);
     }
 
     // --- helpers shared by full and single-particle updates ---
@@ -91,7 +90,7 @@ struct PsiProj {
     void compute_esp() {
         for (int e = 0; e < N; ++e)
             get_symmetric_polynomials(esp.col(e).data(), u_v_ratio.col(e).data(), N - 1, b,
-                                      reg_coeffs.data(), jk_type);
+                                      reg_coeffs.data());
     }
 
     void reshape_and_phase(int iter) {

@@ -1,0 +1,389 @@
+\documentclass[11pt]{article}
+
+% Compile with xelatex (or lualatex): handles the Unicode (Ψ, θ, Λ, …) natively.
+%   latexmk -xelatex MANUAL.tex      (or:  xelatex MANUAL.tex)
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{fontspec}
+\setmainfont{STIX Two Text}   % has Greek + scientific symbols
+\setmonofont{Menlo}           % monospace with Greek (for code blocks)
+\usepackage{newunicodechar}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{fvextra}              % fancyvrb + breaklines for code blocks
+\fvset{breaklines=true,breakanywhere=true}
+\usepackage{url}
+\urlstyle{tt}
+\newcommand{\fpath}[1]{\path{#1}} % breakable monospace for long paths/commands
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue]{hyperref}
+\usepackage{enumitem}
+\setlist{nosep,leftmargin=1.4em}
+
+% Fallbacks for symbols that may not be in the chosen text font.
+\newunicodechar{−}{\ensuremath{-}}
+\newunicodechar{×}{\ensuremath{\times}}
+\newunicodechar{≥}{\ensuremath{\geq}}
+\newunicodechar{≤}{\ensuremath{\leq}}
+\newunicodechar{≈}{\ensuremath{\approx}}
+\newunicodechar{≠}{\ensuremath{\neq}}
+\newunicodechar{≡}{\ensuremath{\equiv}}
+\newunicodechar{→}{\ensuremath{\rightarrow}}
+\newunicodechar{⊗}{\ensuremath{\otimes}}
+\newunicodechar{·}{\ensuremath{\cdot}}
+\newunicodechar{∏}{\ensuremath{\textstyle\prod}}
+\newunicodechar{∑}{\ensuremath{\textstyle\sum}}
+\newunicodechar{∈}{\ensuremath{\in}}
+\newunicodechar{∝}{\ensuremath{\propto}}
+\newunicodechar{√}{\ensuremath{\surd}}
+\newunicodechar{⟨}{\ensuremath{\langle}}
+\newunicodechar{⟩}{\ensuremath{\rangle}}
+\newunicodechar{²}{\textsuperscript{2}}
+\newunicodechar{³}{\textsuperscript{3}}
+\newunicodechar{₁}{\textsubscript{1}}
+\newunicodechar{ᵢ}{\textsubscript{i}}
+\newunicodechar{ⱼ}{\textsubscript{j}}
+\newunicodechar{ₖ}{\textsubscript{k}}
+\newunicodechar{ₙ}{\textsubscript{n}}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5em}
+\sloppy
+
+\title{\textbf{CompositeFermions --- Living Manual}}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+A working reference for this repository: what it computes, how the code is organized, the
+public API, the single-vortex-pair JK projection (and how higher fillings are reached), the
+C++ port, validation, performance, and environment gotchas. Keep this updated as the code
+evolves.
+
+\begin{quote}\small
+Status as of the current working tree (not yet committed): the Julia package has been
+refactored into flat, single-responsibility files; the JK projection binds a single vortex
+pair into each orbital (the earlier \code{jk\_type} multiple-roots generalization was removed
+--- see §\ref{sec:jktype}); an unprojected wavefunction \code{Ψunproj} with Sherman--Morrison
+updates was added; a C++ core port lives under \code{cpp/}; the Julia update path was made
+allocation-free.
+\end{quote}
+
+\tableofcontents
+
+\section{What this is}
+
+Monte Carlo evaluation of \textbf{composite-fermion (CF) wavefunctions on the sphere} for the
+fractional quantum Hall effect. It builds Jain--Kamilla (JK) \textbf{projected} and
+\textbf{unprojected} CF wavefunctions and samples them with a Metropolis--Hastings--Gibbs walk
+to compute densities, pair correlations, energies, overlaps, etc.
+
+The projection uses the quaternion/rotation reformulation of JK projection (Gattu et al.;
+manuscript at \code{\textasciitilde/Dropbox/Gattu-new method/main.tex}), in which the projected
+orbital element is a sum over a Wigner-D matrix times \textbf{elementary symmetric polynomials
+(ESP)} of the Jastrow ``vortex ratios'' --- far cheaper and more stable than the traditional
+mixed-derivative JK projection.
+
+\section{Repository layout}
+
+\begin{Verbatim}[fontsize=\small]
+src/                 Julia package CFsOnSphere (one flat module, many files)
+test/runtests.jl     Julia test suite (deterministic)
+examples/            Julia Literate-style example samplers
+cpp/                 C++ core port (header-only + CMake)
+docs/, build/, dev/  Documenter / Literate build artifacts (generated)
+ref/                 reference data (e.g. cf_ground_state_energies.csv)
+Project.toml         Julia package (compat: julia >= 1.10)
+README.md            short intro; this MANUAL is the detailed reference
+\end{Verbatim}
+
+\section{Physics background (notation)}
+
+\begin{itemize}
+\item \textbf{\code{Q*} (Qstar)} --- effective monopole strength seen by composite fermions,
+  \code{Q* = Q − p(N−1)/2}. A half-integer; stored as \code{Rational\{Int64\}} in Julia.
+\item \textbf{\code{p}} --- power of the global Jastrow factor ∏\textsubscript{j<k}(uⱼvₖ − uₖvⱼ)\textsuperscript{p}
+  (vortices bound to each electron).
+\item \textbf{\code{l\_m\_list}} --- occupied single-particle orbitals as \code{(L, Lz)} pairs
+  (the filled Λ-levels).
+\item \textbf{spinors} u = cos(θ/2)e\textsuperscript{iφ/2}, v = sin(θ/2)e\textsuperscript{−iφ/2}.
+\item \textbf{Jastrow vortex ratio} for particle i: the ESP roots.
+\item \textbf{single bound pair} --- the JK projection carries Jᵢ = ∏\textsubscript{j≠i}(uᵢvⱼ − uⱼvᵢ)
+  (one vortex pair) through the LLL projection, so Q₁ = (N−1)/2; see §\ref{sec:jktype}.
+\end{itemize}
+
+\textbf{Wavefunction families implemented:}
+
+\begin{center}\small
+\begin{tabular}{@{}l l l l@{}}
+\toprule
+Type & Wavefunction & Slater orbitals & Rank-1 inverse update? \\
+\midrule
+\code{Ψproj}   & JK-projected CF & multi-particle (ESP-coupled) & No (a move changes every column) \\
+\code{Ψparton} & JK-projected parton & multi-particle & No \\
+\code{Ψunproj} & unprojected det·Jastrow & single-particle harmonics & \textbf{Yes (Sherman--Morrison)} \\
+\code{ΨoneLL}  & bare Jastrow (Laughlin) & none & n/a \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Julia package (\code{src/})}
+
+Single module \code{CFsOnSphere} (\code{src/CFsOnSphere.jl}) that \code{include}s the files below
+in order (no inner submodules). External deps: \code{LinearAlgebra}, \code{Random}, \code{JLD2},
+\code{Combinatorics}, \code{Serialization}, \code{SpecialFunctions}. BLAS is pinned to 1 thread.
+
+\begin{center}\small
+\begin{tabular}{@{}l p{0.62\textwidth}@{}}
+\toprule
+File & Contents \\
+\midrule
+\code{calculate\_j\_y\_eigenstates.jl} & J\_y eigenstate table (disk-memoised in \code{tempdir()}) \\
+\code{spinor\_coordinates.jl} & \code{u\_v\_generator(θ, φ)} \\
+\code{monopole\_harmonics.jl} & \code{calculate\_ll(L, Q, θ, φ)} --- single-particle harmonics \\
+\code{symmetric\_polynomials.jl} & \code{get\_symmetric\_polynomials!} (ESP) \\
+\code{jk\_projection\_utilities.jl} & \code{projection\_coeff}, \code{generate\_fourier\_matrices} \\
+\code{legendre\_polynomials.jl} & \code{legendre\_polynomials!} \\
+\code{projected\_wavefunction.jl} & \code{Ψproj}, \code{Ψparton}: types, constructors, updates, \code{copy!} \\
+\code{unprojected\_wavefunction.jl} & \code{Ψunproj}, \code{ΨoneLL}: types, constructors, updates, \code{copy!} \\
+\code{slater\_inverse.jl} & Sherman--Morrison + \code{build\_extended\_slater!} (Ψunproj) \\
+\code{lambda\_levels.jl} & \code{cf\_ground\_state\_lm}, \code{cf\_quasihole\_lm}, \code{cf\_quasiparticle\_lm} \\
+\code{monte\_carlo.jl} & \code{rand\_θ\_ϕ\_gen}, \code{proposal}, ARM, \code{gibbs\_thermalization!}, density, det-ratios \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Public API (exports)}
+
+\begin{itemize}
+\item \textbf{Types:} \code{Ψproj}, \code{Ψparton}, \code{Ψunproj}, \code{ΨoneLL}
+\item \textbf{Build λ-levels:} \code{cf\_ground\_state\_lm(N,n,p)}, \code{cf\_quasihole\_lm},
+  \code{cf\_quasiparticle\_lm} → return \code{(Qstar, l\_m\_list)}
+\item \textbf{Update:} \code{update\_wavefunction!(ψ, θ, φ)} (full) and
+  \code{update\_wavefunction!(ψ, θ, φ, iter)} (single particle); \code{copy!(ψ1, ψ2[, iter])}
+\item \textbf{Sampling:} \code{rand\_θ\_ϕ\_gen(RNG, N)}, \code{proposal(RNG, θ, φ, σ)},
+  \code{gibbs\_thermalization!(...)}, \code{update\_density!}
+\item \textbf{Unprojected fast path (Ψunproj only):} \code{initialize\_inverse!},
+  \code{slater\_det\_ratio}, \code{update\_inverse!}, \code{build\_extended\_slater!}
+  (QH/QP columns; signatures in §\ref{sec:jktype} usage)
+\item \textbf{Building blocks:} \code{calculate\_ll}, \code{get\_symmetric\_polynomials!},
+  \code{legendre\_polynomials!}, \code{construct\_det\_ratios}
+\item \textbf{Re-exported:} \code{save}, \code{load} (JLD2); \code{logdet}, \code{lu}, \code{inv}
+\end{itemize}
+
+\subsection{Minimal usage --- projected sampler}
+\begin{Verbatim}[fontsize=\small]
+using CFsOnSphere, Random
+RNG = Random.default_rng()
+Qstar, lm = cf_ground_state_lm(10, 2, 1)          # nu = 2/5, N = 10
+N = length(lm)
+cur = Ψproj(Qstar, 1, N, lm); nxt = Ψproj(Qstar, 1, N, lm)
+θ, φ = rand_θ_ϕ_gen(RNG, N); θn = copy(θ); φn = copy(φ)
+logpdf(ψ) = 2.0 * real(logdet(ψ.slater_det) + ψ.jastrow_factor_log)
+it, σ, _, acc = gibbs_thermalization!(RNG, cur, nxt, θ, φ, θn, φn,
+                                      π/sqrt(12), logpdf, 500_000)
+# then a sampling loop: propose -> update_wavefunction!(nxt, ..., it) -> MH accept -> copy!
+\end{Verbatim}
+
+\subsection{Minimal usage --- unprojected + Sherman--Morrison (fast)}
+\begin{Verbatim}[fontsize=\small]
+Qstar, lm = cf_ground_state_lm(9, 3, 1)
+ψc = Ψunproj(Qstar, 1, 9, lm); ψn = Ψunproj(Qstar, 1, 9, lm)
+update_wavefunction!(ψc, θ, φ); copy!(ψn, ψc); initialize_inverse!(ψc)
+temp = zeros(ComplexF64, 9)
+# per step:
+update_wavefunction!(ψn, θp, φp, it)
+dr = slater_det_ratio(ψc, ψn, it)                 # O(N)
+if 2real(log(dr) + ψn.jastrow_factor_log - ψc.jastrow_factor_log) >= log(rand())
+    update_inverse!(ψc, ψn, it, dr, temp); copy!(ψc, ψn, it)   # O(N^2); update BEFORE copy
+else
+    copy!(ψn, ψc, it)
+end
+\end{Verbatim}
+
+Quasihole/quasiparticle amplitudes: build fixed orbital columns with \code{calculate\_ll}, then
+\code{build\_extended\_slater!(Sfull, ψ, qh\_columns)} → an LU whose \code{transpose(lu) \textbackslash\ e\_end}
+gives the amplitude (see \code{test/runtests.jl}).
+
+\section{Single-vortex-pair JK projection (and why \code{jk\_type} was removed)}\label{sec:jktype}
+
+\textbf{What the projection does.} The projected orbital element binds a \emph{single} vortex
+pair into the LLL projection:
+\[
+\bigl[\,P_{\mathrm{LLL}}\; Y_{Q^*,L,M}\; J_i\,\bigr]\big/ J_i,
+\qquad J_i = \prod_{j\neq i}(u_i v_j - u_j v_i),
+\qquad Q_1 = \tfrac{N-1}{2}.
+\]
+The three coupled implementation points are now fixed (no parameter):
+\begin{enumerate}
+\item \textbf{JK angular momentum:} Q₁ = (N−1)/2, so 2Q₁ = N−1 vortex factors; enters the
+  binomials of \code{projection\_coeff} via \code{generate\_fourier\_matrices}.
+\item \textbf{ESP roots:} the N−1 vortex-ratio roots enter the elementary symmetric polynomials
+  once each --- \code{get\_symmetric\_polynomials!} (no multiplicity argument).
+\item \textbf{ESP normalization:} \code{reg\_coeffs[i] = i/((N−1) − i + 1)}, giving
+  ∏\textsubscript{k=1}\textsuperscript{d} reg = 1/C(N−1, d) = 1/C(2Q₁, d).
+\end{enumerate}
+
+\textbf{Reaching the full Jain sequence.} The filling is set by the \emph{global} Jastrow power
+\code{p} (\code{Q* = Q − p(N−1)/2}), \textbf{independently} of the projection. Every
+ν = n/(2p̃n+1) is obtained by binding one pair in the projection and attaching the rest as an
+outer holomorphic Jastrow factor (which stays in the LLL trivially):
+\[
+\Psi_{n/(2\tilde p n+1)} \;=\; \Phi_1^{\,2(\tilde p-1)}\; P_{\mathrm{LLL}}\!\bigl[\Phi_n\,\Phi_1^2\bigr],
+\qquad\text{set } \code{p} = 2\tilde p .
+\]
+E.g.\ ν = 2/9 (n=2, p̃=2) is \code{Ψproj(Qstar, 4, N, l\_m\_list)} = Φ₁²\,P\textsubscript{LLL}[Φ₂Φ₁²].
+
+\textbf{ESP kernel} (\code{symmetric\_polynomials.jl}). A single multiplicity-1 recurrence
+(degree iterated high→low), verified against an independent ground truth (direct expansion of
+∏ᵢ(1 + rᵢx)) \emph{to all orders}; degrees beyond N−1 are exactly zero.
+
+\subsection*{Why \code{jk\_type ≥ 2} was removed}
+An earlier \code{jk\_type} parameter bound \code{jk\_type} vortex pairs \emph{inside} the
+projection (ESP roots with multiplicity \code{jk\_type}, Q₁ = jk\_type·(N−1)/2). It is
+mathematically correct at integer \code{jk\_type} (the generalized derivation is in
+\code{derivation\_jktype.tex}), but:
+\begin{itemize}
+\item It is \textbf{unnecessary}: the outer-Jastrow construction above reaches every filling
+  with the single-pair projection --- the safe case where each pair contributes only a simple
+  pole (the \code{jk\_type=1} case is bit-exact to the original code).
+\item It is \textbf{fragile}: for higher Λ-levels the multiplicity-\code{jk\_type} ESP develops
+  higher-order self-poles (the \code{1/(z\textsubscript{i}−z\textsubscript{j})\textsuperscript{k}}
+  tower, coefficient ∝ jk\_type(jk\_type−1)…), benign only because Jᵢ\textsuperscript{jk\_type}
+  is a polynomial --- i.e.\ only at \emph{integer} \code{jk\_type}; fractional values diverge.
+  See \code{mathematica/} (clustering analysis) and \code{derivation\_jktype.tex}.
+\end{itemize}
+The standalone records \code{derivation\_jktype.tex} and \code{mathematica/} document the full
+analysis behind this decision.
+
+\section{C++ port (\code{cpp/})}
+
+A native C++ core for FQH groups that work in C++. Header-only, depends only on \textbf{Eigen};
+built as a CMake \code{INTERFACE} library with examples and tests.
+
+\textbf{Scope.} Ported: \code{PsiProj}, \code{PsiUnproj} (+ Sherman--Morrison),
+the MC driver, λ-level builders, \code{calculate\_ll}, ESP, projection, Legendre.
+\textbf{Deferred:} \code{Ψparton}, \code{ΨoneLL}, \code{construct\_det\_ratios}, JLD2 I/O (output is CSV).
+
+\textbf{Conventions / caveats} (also in \code{cpp/README.md}):
+\begin{itemize}
+\item \textbf{Half-integer angular momenta are stored doubled} --- every Q*, L, Lz, μ is an
+  \code{int} equal to 2× its value (\code{two\_L = 2L}); orbital lists are
+  \code{vector<pair<int,int>>} of \code{(two\_L, two\_Lz)}.
+\item \textbf{No bit-exact MCMC vs Julia} --- \code{std::mt19937\_64} ≠ Julia's RNG, so chains agree
+  only statistically. Deterministic wavefunction values match (see §\ref{sec:val}).
+\item \textbf{\code{log\_det} imaginary part} carries a 2πi branch ambiguity; only its real part
+  is physically used.
+\item The J\_y eigenvector table V[m1,μ]·conj(V[m2,μ]) is \textbf{phase-invariant}, so Eigen/LAPACK
+  agree exactly despite different eigenvector phase conventions.
+\end{itemize}
+
+\textbf{Build \& test:}
+\begin{Verbatim}[fontsize=\small]
+cd cpp
+cmake -B build -DCMAKE_PREFIX_PATH=/opt/homebrew     # locate Eigen
+cmake --build build -j
+ctest --test-dir build --output-on-failure
+./build/sampler_single_state 10 2 1   # projected nu=2/5
+./build/sampler_unprojected  9 3 1    # unprojected + Sherman-Morrison
+\end{Verbatim}
+
+\section{Validation}\label{sec:val}
+
+\textbf{Julia} (\code{test/runtests.jl}, deterministic seed): rand/density, \code{Ψproj}
+full-vs-incremental consistency, λ-level builders, ESP branch agreement \emph{and all-orders
+ground truth}, proposal convention+isotropy, \code{Ψunproj} orbitals vs \code{calculate\_ll} +
+incremental, Sherman--Morrison correctness, non-square \code{build\_extended\_slater!} (QH
+amplitude), \code{Ψproj} single-bound-pair normalization.
+
+\textbf{Bit-exact regression:} the projected wavefunction reproduces the pre-refactor
+single-pair (former \code{jk\_type=1}) code to \textbf{0.0} on fixed configs. Gates every Julia
+change, including the allocation optimization (§\ref{sec:perf}).
+
+\textbf{C++} (\code{ctest}, 3 suites):
+\begin{itemize}
+\item \code{test\_cfsonsphere} --- native structural tests (mirror of the Julia suite).
+\item \code{test\_reference} --- small cross-check vs Julia CSVs (ESP, projection\_coeff,
+  slater\_det, jastrow) to ≤ 1e-12.
+\item \code{test\_logpsi} --- \textbf{large cross-check}: 12 systems × 1000 shared configs (sizes
+  4→32, Λ-levels 1→5, p = 1,2,4, proj \& unproj), comparing Re(log Ψ) and the phase
+  e\textsuperscript{i·Im(log Ψ)}; all match (worst 1.2e-10 on the 25×25 case, rest ~1e-13).
+\end{itemize}
+
+\textbf{Regenerate the C++ reference data} (after any numerics change):
+\begin{Verbatim}[fontsize=\small]
+julia +lts --project=. cpp/reference/dump_reference.jl
+julia +lts --project=. cpp/reference/dump_logpsi.jl     # also writes timing_julia.csv
+\end{Verbatim}
+
+\section{Performance}\label{sec:perf}
+
+\textbf{Julia update path is allocation-free} (after the \code{mul!} / broadcast-outer-product /
+in-place-U,V cleanup): full update at N=32 went 108\,KB → 96\,B; single-particle 23\,KB → 0\,B.
+\code{logdet} still allocates its LU copy (~17\,KB at N=32) --- inherent, and C++ allocates the same.
+
+\textbf{C++ vs Julia, full log Ψ} (update + logdet + jastrow), warmup + 10-pass average:
+\begin{center}\small
+\begin{tabular}{@{}r r r r@{}}
+\toprule
+N & Julia (µs) & C++ (µs) & Julia/C++ \\
+\midrule
+4   & 1.5  & 0.8  & 1.9× \\
+10  & 6.2  & 4.4  & 1.4× \\
+16  & ~20  & 12.0 & ~1.5× \\
+32  & 74   & 51   & 1.46× \\
+$\sim$100 & \multicolumn{3}{l}{essentially equal (BLAS-bound)} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Takeaway.} The residual mid-N gap is small/medium-matrix linear-algebra overhead
+(Eigen inlined routines vs OpenBLAS per-call dispatch + the batched per-column \code{gemv}),
+\emph{not} allocations, and it vanishes at production-size N. The C++ port is justified by
+\textbf{convenience for C++-native groups, embedding, and as an independent validation
+oracle --- not by a speed win}.
+
+\section{Environment \& gotchas}
+
+\begin{itemize}
+\item \textbf{Julia version:} supports >= 1.10; runs on LTS 1.10 and default 1.12. Use
+  \code{julia +lts} to force 1.10. \textbf{Do not mix Julia versions on the same \code{Manifest.toml}}
+  --- a 1.12 run can rewrite it with 1.12 stdlib pins (e.g.\ \code{JuliaSyntaxHighlighting 1.12.0},
+  a 1.12-era \code{PrecompileTools}) and then 1.10 cannot resolve/load. Fix: delete
+  \code{Manifest.toml} and \code{Pkg.instantiate()} under the intended version.
+\item \textbf{Stale eigenstate cache:} \code{calculate\_j\_y\_eigenstates} memoises to
+  \fpath{tempdir()/j_y_eigenstates_*.jls} via \code{Serialization}, which is \textbf{not portable
+  across Julia minor versions}. Delete when switching:
+\begin{Verbatim}[fontsize=\small]
+find $(julia -e 'print(tempdir())') -name 'j_y_eigenstates_*.jls' -delete
+\end{Verbatim}
+\item \textbf{C++ toolchain:} needs Eigen + CMake (\code{brew install eigen cmake}); Eigen headers
+  at \fpath{/opt/homebrew/opt/eigen/include/eigen3}.
+\end{itemize}
+
+\section{Known issues \& open questions}
+
+\begin{enumerate}
+\item \textbf{Generated docs are stale} (\code{docs/build/}, \code{docs/Manifest.toml} mention old
+  submodule names / removed deps); they regenerate on a docs build.
+\item \textbf{Example CSV outputs} (\code{cpp/density.csv}, etc.) are written to the working
+  directory by the sample programs; consider gitignoring.
+\end{enumerate}
+
+\section{Extending / maintenance checklist}
+
+\begin{itemize}
+\item Any change to Julia numerics → run the \textbf{bit-exact regression} and
+  \code{test/runtests.jl}; if the projected output moves off 0.0, stop.
+\item Any change to shared physics (ESP, projection, orbitals) → \textbf{regenerate C++ references}
+  (§\ref{sec:val}) and re-run \code{ctest}.
+\item Adding a wavefunction type → mirror \code{update\_wavefunction!(full)/(single)} + \code{copy!}
+  + (if single-particle orbitals) the Sherman--Morrison interface; add it to the
+  \code{gibbs\_thermalization!} \code{Union}.
+\end{itemize}
+
+\end{document}

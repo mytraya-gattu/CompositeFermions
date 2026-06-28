@@ -1,0 +1,192 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue]{hyperref}
+
+\newcommand{\LLL}{\mathcal{P}_{\mathrm{LLL}}}
+\newcommand{\Ycal}{\mathcal{Y}}
+\newcommand{\Dcal}{\mathcal{D}}
+\newcommand{\Qs}{Q^{\star}}
+\newcommand{\jk}{\mathtt{jk\_type}}
+\newcommand{\etil}{\tilde{e}}
+
+\title{\textbf{Jain--Kamilla projection for arbitrary \texttt{jk\_type}}\\[2pt]
+\large Generalizing the quaternion derivation (SM Sec.~II) to $J_i^{\,p}$}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\noindent
+This note repeats the supplement's quaternion derivation of the Jain--Kamilla (JK) projection
+(Gattu \& Jain, SM Sec.~II), keeping the per-electron Jastrow factor at an \emph{arbitrary
+integer power} $p \equiv \jk$. The result is that the published formula is unchanged
+\emph{except} that the vortex count $(N-1)$ is replaced everywhere by $p(N-1)$; equivalently
+$Q_1 = (N-1)/2 \to Q_1 = p(N-1)/2$. This is exactly what the code implements
+(\texttt{Q1 = jk\_type*(N-1)//2}, ESP root multiplicity \texttt{jk\_type}, and the
+normalization $1/\binom{p(N-1)}{\text{degree}}$).
+
+\section{Setup}
+
+A column element of the JK Slater determinant is the lowest-Landau-level (LLL) projection of a
+monopole harmonic at effective monopole strength $\Qs$ times the per-electron Jastrow factor
+raised to the power $p$:
+\begin{equation}
+  O^{(p)}_{l,m}(i)\;\equiv\;\LLL\,\Ycal_{\Qs,l,m}(r_i)\,J_i^{\,p},
+  \qquad
+  J_i=\prod_{j\neq i} d(r_i,r_j),
+  \label{eq:object}
+\end{equation}
+where $r_i$ is the unit quaternion of electron $i$ and
+$d(r_i,r_j)=(r_i^{-1}\!\cdot r_j)_{\mathrm A}=r_{\mathrm{S}i}r_{\mathrm{A}j}-r_{\mathrm{S}j}r_{\mathrm{A}i}$
+is the (left-invariant) quaternion displacement. For the standard $2p$-vortex composite fermion
+the full Jastrow $\prod_{a<b}(u_av_b-u_bv_a)^{2p}$ distributes over the determinant as
+$\prod_i J_i^{\,p}$ (each pair appears twice, once per column), so the per-column object is
+$J_i^{\,p}$ and $p=\jk$ is exactly half the number of attached vortices. ($p=1$ is the standard
+JK case derived in the SM.)
+
+\section{Step 1 --- rotational covariance}
+
+$d$ is invariant under left multiplication, $d(r\cdot r_i,\,r\cdot r_j)=d(r_i,r_j)$, and the
+quaternionic harmonics rotate cleanly,
+$\Ycal_{\Qs,l,m}(r_i)=\sum_{m'}\Dcal^{l}_{m,m'}(r)\,\Ycal_{\Qs,l,m'}(r^{-1}\!\cdot r_i)$.
+Hence, for \emph{any} rotation $r$ (writing $R_i\equiv r^{-1}\!\cdot r_i$),
+\begin{equation}
+  O^{(p)}_{l,m}(i)=\sum_{m'}\Dcal^{l}_{m,m'}(r)\,
+  \LLL\Big[\,\Ycal_{\Qs,l,m'}(R_i)\prod_{j\neq i} d(R_i,R_j)^{\,p}\Big].
+  \label{eq:cov}
+\end{equation}
+
+\section{Step 2 --- ESP expansion (here $p$ enters)}
+
+Write $d(R_i,R_j)=R_{\mathrm{S}i}R_{\mathrm{A}j}-R_{\mathrm{S}j}R_{\mathrm{A}i}
+=R_{\mathrm{A}j}\big(R_{\mathrm{S}i}-R_{\mathrm{A}i}\,x_j\big)$ with $x_j\equiv R_{\mathrm{S}j}/R_{\mathrm{A}j}$.
+Then
+\begin{equation}
+  \prod_{j\neq i} d(R_i,R_j)^{\,p}
+  =\Big(\prod_{j\neq i}R_{\mathrm{A}j}^{\,p}\Big)
+   \prod_{j\neq i}\big(R_{\mathrm{S}i}-R_{\mathrm{A}i}\,x_j\big)^{p}
+  =\Big(\prod_{j\neq i}R_{\mathrm{A}j}^{\,p}\Big)
+   \sum_{r=0}^{p(N-1)}(-1)^{r}\,R_{\mathrm{S}i}^{\,p(N-1)-r}R_{\mathrm{A}i}^{\,r}\;
+   e_{r}\!\big(X_i^{(p)}\big).
+  \label{eq:esp}
+\end{equation}
+The only change from the $p=1$ SM derivation is that each root $x_j$ now appears \emph{$p$ times}:
+$X_i^{(p)}=\{\,x_j\ \text{with multiplicity}\ p : j\neq i\,\}$ is a multiset of $p(N-1)$ elements,
+and $e_r$ is its $r$-th elementary symmetric polynomial. The expansion runs to degree $p(N-1)$.
+(This multiset/multiplicity statement is what the code computes via
+\texttt{get\_symmetric\_polynomials!(\dots; mult=jk\_type)}, and was verified against the direct
+product $\prod_j(1+x_j t)^p$ to all orders.)
+
+\section{Step 3 --- $J_i^{\,p}$ is a single spin-$Q_1$ object}
+
+The bracket in \eqref{eq:esp} is a homogeneous polynomial of degree $p(N-1)$ in the spinor
+$(R_{\mathrm{S}i},R_{\mathrm{A}i})$ of electron $i$. A homogeneous spinor polynomial of degree
+$2Q_1$ is precisely a monopole harmonic of angular momentum
+\begin{equation}
+  \boxed{\,Q_1=\tfrac{1}{2}\,p(N-1)\,}.
+\end{equation}
+Concretely, with $r=Q_1-m''$,
+$R_{\mathrm{S}i}^{\,p(N-1)-r}R_{\mathrm{A}i}^{\,r}=R_{\mathrm{S}i}^{\,Q_1+m''}R_{\mathrm{A}i}^{\,Q_1-m''}$,
+and the top-weight harmonic at monopole $Q_1$ is
+$\Ycal_{Q_1,Q_1,m''}(R_i)=\sqrt{\tfrac{2Q_1+1}{4\pi}\binom{2Q_1}{\,Q_1-m''}}\;
+R_{\mathrm{S}i}^{\,Q_1+m''}R_{\mathrm{A}i}^{\,Q_1-m''}$.
+Therefore
+\begin{equation}
+  \prod_{j\neq i} d(R_i,R_j)^{\,p}
+  =\Big(\prod_{j\neq i}R_{\mathrm{A}j}^{\,p}\Big)
+   \sum_{m''=-Q_1}^{Q_1}\frac{(-1)^{Q_1-m''}\,e_{Q_1-m''}\!\big(X_i^{(p)}\big)}
+        {\sqrt{\tfrac{2Q_1+1}{4\pi}\binom{2Q_1}{\,Q_1-m''}}}\;\Ycal_{Q_1,Q_1,m''}(R_i).
+  \label{eq:harmonic}
+\end{equation}
+This is the \emph{only} place the Jastrow power matters, and it enters solely through
+$2Q_1=p(N-1)$: the count $(N-1)$ of the $p=1$ SM is replaced by $p(N-1)$, both in the degree of
+the harmonic and in the binomial $\binom{2Q_1}{\,Q_1-m''}$.
+
+\section{Step 4 --- project at the identity}
+
+Insert \eqref{eq:harmonic} into \eqref{eq:cov}; the LLL projection now acts on the product of
+two monopole harmonics, $\Ycal_{\Qs,l,m'}(R_i)\,\Ycal_{Q_1,Q_1,m''}(R_i)$, which lives at total
+monopole strength $Q\equiv\Qs+Q_1$ and projects onto its lowest level $l=\Qs+Q_1$. Following the
+SM, choose the rotation $r=r_i^{-1}$ so that $R_i=\mathbf 1$. At the identity only the top
+component survives, $\Ycal_{Q,Q,M}(\mathbf 1)=\delta_{M,Q}\sqrt{(2Q+1)/4\pi}$, which forces
+$m'+m''=\Qs+Q_1$, i.e.\ $m''=\Qs+Q_1-m'$ and hence
+\begin{equation}
+  r=Q_1-m''=m'-\Qs .
+\end{equation}
+Thus each $m'$ selects the single ESP degree $r=m'-\Qs$, and (using $J_i=\prod_{j\neq i}d(r_i,r_j)$
+to undo the $\prod R_{\mathrm{A}j}^{p}$ prefactor) one obtains the projected orbital
+\begin{equation}
+  \boxed{\;
+  \frac{\LLL\,\Ycal_{\Qs,l,m}(r_i)\,J_i^{\,p}}{J_i^{\,p}}
+  =\sum_{m'=\Qs}^{l}(-1)^{m'-\Qs}\,
+   N^{l}_{m',\Qs,Q_1}\,\Dcal^{l}_{m,m'}(r_i)\,
+   \etil_{m'-\Qs}\!\big(X_i^{(p)}\big)\;}
+  \label{eq:final}
+\end{equation}
+with $X_i^{(p)}=\{(r_i^{-1}\!\cdot r_j)_{\mathrm S}/(r_i^{-1}\!\cdot r_j)_{\mathrm A}\}$ each taken
+$p$ times, and
+\begin{equation}
+  N^{l}_{m',\Qs,Q_1}
+  =\frac{\binom{2Q_1}{\,l-\Qs}\binom{l-\Qs}{\,m'-\Qs}}{\binom{2Q_1+l+\Qs+1}{\,l-\Qs}}
+   \sqrt{\frac{2l+1}{4\pi}\,\frac{\binom{2l}{\,l+\Qs}}{\binom{2l}{\,l+m'}}},
+  \qquad Q_1=\tfrac{1}{2}p(N-1).
+  \label{eq:Nl}
+\end{equation}
+Equations \eqref{eq:final}--\eqref{eq:Nl} are identical in form to the published $p=1$ result;
+only $2Q_1=p(N-1)$ differs. The Wigner-$D$ matrices, the phase $(-1)^{m'-\Qs}$, the summation
+range $m'=\Qs,\dots,l$, and the spin-$l$ structure are properties of the \emph{orbital}
+$(\Qs,l)$ and are untouched by $p$.
+
+\section{Step 5 --- the regularization $\etil$}
+
+The harmonic decomposition \eqref{eq:harmonic} carries a factor $1/\!\sqrt{\binom{2Q_1}{\,r}}$
+(with $r=m'-\Qs$). The LLL overlap of the two harmonics at $R_i=\mathbf 1$ --- a $3j$ symbol,
+evaluated explicitly in the SM --- supplies the complementary factor $1/\!\sqrt{\binom{2Q_1}{\,r}}$
+(together with the binomials collected into $N^{l}$ above). The two combine to a \emph{full}
+binomial, so the regularized ESP appearing in \eqref{eq:final} is
+\begin{equation}
+  \etil_{r}\!\big(X_i^{(p)}\big)=\frac{e_{r}\!\big(X_i^{(p)}\big)}{\binom{2Q_1}{\,r}}
+  =\frac{e_{r}\!\big(X_i^{(p)}\big)}{\binom{p(N-1)}{\,r}},
+  \qquad r=m'-\Qs .
+  \label{eq:reg}
+\end{equation}
+That the denominator is the full binomial $\binom{2Q_1}{r}$ (not $\sqrt{\ }$) is fixed
+independently by the requirement that \eqref{eq:final} reduce, at $p=1$, to the published formula
+--- which the implementation reproduces bit-for-bit. In the code this is
+\texttt{reg\_coeffs[i] = i/(jk\_type*(N-1) - i + 1)}, i.e.\
+$\prod_{k=1}^{r}\texttt{reg\_coeffs}[k]=1/\binom{p(N-1)}{r}$.
+
+\section{Conclusion and scope}
+
+\textbf{What is proved.} For arbitrary integer $p=\jk$, the per-column projected orbital
+\eqref{eq:object} is given exactly by \eqref{eq:final}--\eqref{eq:reg}, obtained from the $p=1$
+derivation by the single replacement
+\[
+  (N-1)\ \longrightarrow\ p(N-1)=2Q_1 .
+\]
+Hence the three coupled choices in the code --- $Q_1=p(N-1)/2$ inside
+\texttt{projection\_coeff}, ESP root multiplicity $p$, and the normalization
+$1/\binom{p(N-1)}{r}$ --- are the correct and mutually consistent generalization. The ESP kernel
+itself was separately verified to all orders against the direct product expansion.
+
+\textbf{What is \emph{not} proved (where to look for the reported issue).} This certifies the
+\emph{orbital} (one Slater column), not the assembled many-body state. The code's column is
+$\LLL(\Ycal\,J_i^{p})/J_i^{p}$, and since
+$\prod_i J_i^{\,p}=\pm\prod_{a<b}(u_av_b-u_bv_a)^{2p}$, a physical state requires the outer
+Jastrow power (\texttt{p} in \texttt{jastrow\_factor\_log}) and $\Qs$ to co-vary with $\jk$:
+specifically the total monopole strength must satisfy $Q=\Qs+Q_1=\Qs+\tfrac12\,\jk\,(N-1)$, and
+the outer Jastrow must supply $2\,\jk$ vortices in total. Bumping \texttt{jk\_type} $1\to2$
+without correspondingly changing the outer Jastrow power / $\Qs$ yields a wrong wavefunction ---
+not because of the projection math (this note) or the ESP (verified), but because of the
+assembled-state bookkeeping.
+
+\textbf{Decisive numerical check (recommended).} Compare, for small $N$, the code's
+\texttt{slater\_det} column against a brute-force evaluation of the traditional mixed-derivative
+JK form (SM Eq.~10) with $J_i\to J_i^{p}$. Agreement confirms \eqref{eq:final} independently of
+the ESP route; any remaining discrepancy in full-state observables then localizes unambiguously
+to the $\texttt{p}/\Qs/\jk$ assembly.
+
+\end{document}

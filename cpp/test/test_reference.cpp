@@ -65,18 +65,16 @@ static void check_esp() {
     std::vector<cdouble> roots(roots_m.data(), roots_m.data() + roots_m.size());
     const int nroots = static_cast<int>(roots.size());
     const int b = 8;
-    for (int mult : {1, 2, 3}) {
-        const int Npart = 13;
-        std::vector<double> reg(b);
-        for (int i = 1; i <= b; ++i) reg[i - 1] = double(i) / (mult * (Npart - 1) - i + 1);
-        std::vector<cdouble> dest(b + 1);
-        get_symmetric_polynomials(dest.data(), roots.data(), nroots, b, reg.data(), mult);
-        Eigen::MatrixXcd ref = read_cmat(path("esp_mult" + std::to_string(mult) + ".csv"));
-        double md = 0;
-        for (int d = 0; d <= b; ++d) md = std::max(md, std::abs(dest[d] - ref(d, 0)));
-        std::printf("ESP mult=%d  maxdiff=%.3e\n", mult, md);
-        CHECK_NEAR(md, 0.0, 1e-12);
-    }
+    const int Npart = 13;
+    std::vector<double> reg(b);
+    for (int i = 1; i <= b; ++i) reg[i - 1] = double(i) / ((Npart - 1) - i + 1);
+    std::vector<cdouble> dest(b + 1);
+    get_symmetric_polynomials(dest.data(), roots.data(), nroots, b, reg.data());
+    Eigen::MatrixXcd ref = read_cmat(path("esp.csv"));
+    double md = 0;
+    for (int d = 0; d <= b; ++d) md = std::max(md, std::abs(dest[d] - ref(d, 0)));
+    std::printf("ESP  maxdiff=%.3e\n", md);
+    CHECK_NEAR(md, 0.0, 1e-12);
 }
 
 static void check_projection_coeff() {
@@ -96,14 +94,14 @@ static void check_projection_coeff() {
     CHECK_NEAR(md, 0.0, 1e-12);
 }
 
-static void check_proj(const std::string& tag, int N, int n, int p, int jk_type) {
+static void check_proj(const std::string& tag, int N, int n, int p) {
     auto [twoQ, lm] = cf_ground_state_lm(N, n, p);
     const int Nsys = static_cast<int>(lm.size());
     auto tv = read_vec(path("theta_" + tag + ".csv"));
     auto pv = read_vec(path("phi_" + tag + ".csv"));
     Eigen::VectorXd th = Eigen::Map<Eigen::VectorXd>(tv.data(), Nsys);
     Eigen::VectorXd ph = Eigen::Map<Eigen::VectorXd>(pv.data(), Nsys);
-    PsiProj psi(twoQ, p, Nsys, lm, jk_type);
+    PsiProj psi(twoQ, p, Nsys, lm);
     psi.update(th, ph);
     double md = maxdiff(psi.slater_det, read_cmat(path("slater_" + tag + ".csv")));
     double jd = std::abs(psi.jastrow_factor_log - read_scalar(path("jastrow_" + tag + ".csv")));
@@ -140,8 +138,7 @@ int main(int argc, char** argv) {
     }
     check_esp();
     check_projection_coeff();
-    check_proj("proj1", 10, 2, 1, 1);
-    check_proj("proj2", 10, 2, 2, 2);
+    check_proj("proj1", 10, 2, 1);
     check_unproj("unproj", 9, 3, 1);
     std::printf("\n%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

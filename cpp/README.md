@@ -26,9 +26,9 @@ Run the examples:
 
 ## What's included
 
-- `PsiProj` — projected CF Slater determinant with a general `jk_type` (1, 2, 3, …); the
-  Jastrow power carried through the LLL projection, so `Q₁ = jk_type·(N−1)/2` and the ESP roots
-  have multiplicity `jk_type`. `jk_type = 1` is the standard projection.
+- `PsiProj` — projected CF Slater determinant. The JK projection binds a single vortex pair
+  into each orbital (`Q₁ = (N−1)/2`); higher Jastrow powers `ν = n/(2pn+1)` come from the
+  global Jastrow factor `∏(uᵢvⱼ−uⱼvᵢ)^p` (e.g. `p = 2p̃` gives `Φ₁^{2(p̃−1)} P_LLL[Φₙ Φ₁²]`).
 - `PsiUnproj` — unprojected CF state `det[Y_{Q*,l,m}] · ∏(uᵢvⱼ−uⱼvᵢ)^p` from single-particle
   monopole-harmonic orbitals, with **Sherman–Morrison** inverse tracking
   (`initialize_inverse` / `slater_det_ratio` / `update_inverse`) — valid here because moving one
@@ -57,6 +57,6 @@ here is plain CSV via `io.hpp`).
 
 - `test_cfsonsphere` — native structural tests (ESP branch agreement, full-vs-incremental
   consistency for `PsiProj`/`PsiUnproj`, Sherman–Morrison correctness, non-square
-  `build_extended_slater`, proposal isotropy, jk_type = 2).
+  `build_extended_slater`, proposal isotropy).
 - `test_reference` — cross-checks against Julia. Regenerate the reference CSVs with
   `julia +lts --project=. cpp/reference/dump_reference.jl` from the repo root.

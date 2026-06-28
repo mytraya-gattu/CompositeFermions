@@ -53,21 +53,27 @@ static void test_esp_branches() {
     std::vector<cdouble> roots(nroots);
     for (auto& r : roots) r = cdouble(nd(g), nd(g));
 
-    for (int mult : {1, 2, 3, 4}) {
+    {
         const int Npart = 13;
         std::vector<double> reg(b);
-        for (int i = 1; i <= b; ++i) reg[i - 1] = double(i) / (mult * (Npart - 1) - i + 1);
+        for (int i = 1; i <= b; ++i) reg[i - 1] = double(i) / ((Npart - 1) - i + 1);
 
-        std::vector<cdouble> dest(b + 1), ref(b + 1);
-        get_symmetric_polynomials(dest.data(), roots.data(), nroots, b, reg.data(), mult);
+        std::vector<cdouble> dest(b + 1);
+        get_symmetric_polynomials(dest.data(), roots.data(), nroots, b, reg.data());
 
-        std::vector<cdouble> rep;
-        for (auto& r : roots)
-            for (int k = 0; k < mult; ++k) rep.push_back(r);
-        get_symmetric_polynomials(ref.data(), rep.data(), (int)rep.size(), b, reg.data(), 1);
-
-        double maxd = 0;
-        for (int d = 0; d <= b; ++d) maxd = std::max(maxd, std::abs(dest[d] - ref[d]));
+        // Ground truth: coefficients of prod_i (1 + r_i x), scaled by prod reg.
+        std::vector<cdouble> g(nroots + 1, cdouble(0.0, 0.0));
+        g[0] = cdouble(1.0, 0.0);
+        int deg = 0;
+        for (auto& r : roots) {
+            for (int j = deg; j >= 0; --j) g[j + 1] += r * g[j];
+            ++deg;
+        }
+        double acc = 1.0, maxd = 0;
+        for (int d = 0; d <= b; ++d) {
+            if (d >= 1) acc *= reg[d - 1];
+            maxd = std::max(maxd, std::abs(dest[d] - g[d] * acc));
+        }
         CHECK_NEAR(maxd, 0.0, 1e-9);
     }
 }
@@ -82,20 +88,6 @@ static void test_psiproj_consistency() {
     // moving each particle to its own position must be a no-op
     for (int i = 0; i < N; ++i) psi.update(th(i), ph(i), i);
     CHECK_NEAR((psi.slater_det - S0).cwiseAbs().maxCoeff(), 0.0, 1e-10);
-}
-
-static void test_psiproj_jk_type2() {
-    auto [twoQ, lm] = cf_ground_state_lm(10, 2, 2);
-    const int N = 10;
-    PsiProj psi(twoQ, 2, N, lm, /*jk_type=*/2);
-    CHECK(psi.jk_type == 2);
-    CHECK_NEAR(psi.reg_coeffs(0), 1.0 / (2 * (N - 1)), 1e-14);
-    auto th = fixed_theta(N, 5), ph = fixed_phi(N, 6);
-    psi.update(th, ph);
-    Eigen::MatrixXcd S0 = psi.slater_det;
-    for (int i = 0; i < N; ++i) psi.update(th(i), ph(i), i);
-    CHECK_NEAR((psi.slater_det - S0).cwiseAbs().maxCoeff(), 0.0, 1e-9);
-    CHECK(std::isfinite(log_det(psi.slater_det).real()));
 }
 
 static void test_psiunproj_orbitals() {
@@ -238,7 +230,6 @@ static void test_lambda_builders() {
 int main() {
     test_esp_branches();
     test_psiproj_consistency();
-    test_psiproj_jk_type2();
     test_psiunproj_orbitals();
     test_sherman_morrison();
     test_extended_slater();

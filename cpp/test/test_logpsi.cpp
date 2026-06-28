@@ -89,14 +89,14 @@ int main(int argc, char** argv) {
         if (line.empty()) continue;
         std::istringstream ss(line);
         std::string tag, kind;
-        int N, n, p, jk, Kconf;
-        ss >> tag >> kind >> N >> n >> p >> jk >> Kconf;
+        int N, n, p, Kconf;
+        ss >> tag >> kind >> N >> n >> p >> Kconf;
 
         auto [twoQ, lm] = cf_ground_state_lm(N, n, p);
         const int Nsys = static_cast<int>(lm.size());
         Result r;
         if (kind == "proj") {
-            PsiProj psi(twoQ, p, Nsys, lm, jk);
+            PsiProj psi(twoQ, p, Nsys, lm);
             r = run(psi, Nsys, Kconf, tag);
         } else {
             PsiUnproj psi(twoQ, p, Nsys, lm);
