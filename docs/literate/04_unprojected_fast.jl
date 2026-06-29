@@ -25,7 +25,7 @@ gr()
 # each acceptance ratio from [`slater_det_ratio`](@ref), and on acceptance apply
 # [`update_inverse!`](@ref) **before** copying the state across.
 
-function sample_unprojected(N, n, p; seed = 4, n_therm = 5_000, n_steps = 20_000, n_bins = 48)
+function sample_unprojected(N, n, p; seed = 4, n_therm = 100_000, n_steps = 1_000_000, n_bins = 30)
     Qstar, l_m_list = cf_ground_state_lm(N, n, p)
     system_size = length(l_m_list)
     rng = MersenneTwister(seed)

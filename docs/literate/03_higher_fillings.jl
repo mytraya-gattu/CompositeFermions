@@ -68,7 +68,7 @@ end
 # For ``n \ge 2`` the projection is nontrivial. Building ``\nu = 2/9`` is no harder — set
 # `n = 2`, `p = 4` (two pairs). We sample its density just as in the earlier tutorials.
 
-function density_profile(Qstar, p, l_m_list; seed = 5, n_therm = 5_000, n_steps = 20_000, n_bins = 48)
+function density_profile(Qstar, p, l_m_list; seed = 5, n_therm = 100_000, n_steps = 500_000, n_bins = 30)
     N = length(l_m_list)
     rng = MersenneTwister(seed)
     ψ, ψ_next = Ψproj(Qstar, p, N, l_m_list), Ψproj(Qstar, p, N, l_m_list)

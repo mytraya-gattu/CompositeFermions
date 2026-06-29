@@ -17,7 +17,7 @@ gr()
 
 # A small, self-contained density sampler (same algorithm as tutorial 1).
 
-function density_profile(Qstar, p, l_m_list; seed = 7, n_therm = 5_000, n_steps = 20_000, n_bins = 48)
+function density_profile(Qstar, p, l_m_list; seed = 7, n_therm = 100_000, n_steps = 300_000, n_bins = 30)
     N = length(l_m_list)
     rng = MersenneTwister(seed)
     ψ, ψ_next = Ψproj(Qstar, p, N, l_m_list), Ψproj(Qstar, p, N, l_m_list)

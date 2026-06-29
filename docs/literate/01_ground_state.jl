@@ -23,7 +23,7 @@ gr()
 #
 # Here `p = 2` (one vortex pair) and `n = 1`, i.e. the ``\nu = 1/3`` Laughlin state.
 
-N, n, p = 6, 1, 2            # ν = n/(pn+1) = 1/3
+N, n, p = 10, 1, 2           # ν = n/(pn+1) = 1/3
 Qstar, l_m_list = cf_ground_state_lm(N, n, p)
 @show Qstar length(l_m_list);
 
@@ -52,7 +52,7 @@ rng = MersenneTwister(2024)
 σ = π / sqrt(12)
 
 sampling_iter, σ, _, therm_accept =
-    gibbs_thermalization!(rng, ψ, ψ_next, θ, ϕ, θ_next, ϕ_next, σ, logpdf, 5_000)
+    gibbs_thermalization!(rng, ψ, ψ_next, θ, ϕ, θ_next, ϕ_next, σ, logpdf, 100_000)
 @show therm_accept σ;
 
 # ## Measuring the density
@@ -62,7 +62,7 @@ sampling_iter, σ, _, therm_accept =
 # wrap the Metropolis loop in a function so all loop variables stay in local scope.
 
 function sample_density(rng, ψ, ψ_next, θ, ϕ, θ_next, ϕ_next, σ, sampling_iter, logpdf;
-                        n_steps = 20_000, n_bins = 60)
+                        n_steps = 1_000_000, n_bins = 30)
     N = length(θ)
     θmesh = acos.(LinRange(1.0, -1.0, n_bins + 1))        # equal-area bin edges
     Agrid = 2π .* (cos.(θmesh[1:end-1]) .- cos.(θmesh[2:end]))
