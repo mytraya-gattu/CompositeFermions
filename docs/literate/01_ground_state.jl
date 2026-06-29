@@ -97,9 +97,15 @@ end
 θc, density, accept = sample_density(rng, ψ, ψ_next, θ, ϕ, θ_next, ϕ_next, σ, sampling_iter, logpdf)
 @show accept;
 
-# On a sphere with no edge the bulk density should be flat (up to finite-size wiggles and Monte
-# Carlo noise). The dashed line marks the expected uniform value, ``N/4\pi``.
+# We report the density in magnetic units — the *local filling* ``\nu(\theta)``, whose bulk value
+# is the filling fraction itself. With the monopole strength ``Q_{\text{shift}} = N/2\nu``,
+# ``\nu(\theta) = 2\pi\,n(\theta)/Q_{\text{shift}}``. On the edgeless sphere the bulk is a flat
+# plateau at ``\nu``; plotting from ``0`` keeps it in context rather than zooming into the noise.
 
-plot(θc, density; lw=2, marker=:circle, ms=3, label="measured",
-     xlabel="θ", ylabel="density  n(θ)", title="ν = 1/3 ground state (N = $N)")
-hline!([N / (4π)]; ls=:dash, label="N / 4π")
+ν      = n / (p*n + 1)                 # = 1/3
+Qshift = N / (2ν)
+νθ     = density .* (2π / Qshift)       # local filling, flat value = ν
+
+plot(θc, νθ; lw=2, marker=:circle, ms=3, label="measured", ylims=(0.0, 0.5),
+     xlabel="θ", ylabel="local filling  ν(θ)", title="ν = 1/3 ground state (N = $N)")
+hline!([ν]; ls=:dash, label="ν = 1/3")

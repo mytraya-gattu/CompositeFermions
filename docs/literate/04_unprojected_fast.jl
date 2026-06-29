@@ -79,6 +79,13 @@ end
 θc, dens, accept = sample_unprojected(8, 2, 2)
 @show accept;
 
-plot(θc, dens; lw=2, marker=:circle, ms=3, label="measured",
-     xlabel="θ", ylabel="density n(θ)", title="Unprojected ν = 2/5 (N = 8, Sherman–Morrison)")
-hline!([8 / (4π)]; ls=:dash, label="N / 4π")
+# Local filling ``\nu(\theta) = 2\pi\,n(\theta)/Q_{\text{shift}}`` with ``Q_{\text{shift}} = N/2\nu``;
+# the bulk plateau sits at ``\nu = 2/5``, shown against the ``y=0`` baseline.
+N      = 8
+ν      = 2 / 5
+Qshift = N / (2ν)
+νθ     = dens .* (2π / Qshift)
+
+plot(θc, νθ; lw=2, marker=:circle, ms=3, label="measured", ylims=(0.0, 0.6),
+     xlabel="θ", ylabel="local filling  ν(θ)", title="Unprojected ν = 2/5 (N = 8, Sherman–Morrison)")
+hline!([ν]; ls=:dash, label="ν = 2/5")

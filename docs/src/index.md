@@ -97,25 +97,32 @@ Carlo error; ten chains of a million steps give a smooth estimate.
 results = [run_chain(seed) for seed in 1:10]          # 10 independent chains
 θmesh   = results[1][1]
 θc      = 0.5 .* (θmesh[1:end-1] .+ θmesh[2:end])     # bin centres
-density = mean(last.(results))                        # average over chains
+density = mean(last.(results))                        # number density on the unit sphere
 ```
 
-**5. Plot the density.** On the edgeless sphere the bulk density of an incompressible state is
-flat, sitting at the uniform value ``N/4\pi``.
+**5. Convert to the local filling and plot.** It is natural to report the density in magnetic
+units — the *local filling* ``\nu(\theta)`` — whose bulk value is the filling fraction ``\nu``
+itself. With the monopole strength ``Q_{\text{shift}} = N/2\nu`` for this state,
+``\nu(\theta) = 2\pi\,n(\theta)/Q_{\text{shift}}``. Plotting from ``0`` keeps the flat plateau in
+context (rather than zooming into the per-mille fluctuations).
 
 ```julia
 using Plots
-plot(θc, density; lw = 2, xlabel = "θ", ylabel = "density n(θ)",
-     label = "ν = 1/3  (N=10, 10 chains × 10⁶ steps)")
-hline!([N / (4π)]; ls = :dash, label = "N / 4π")
+ν      = n / (p*n + 1)                 # target filling = 1/3
+Qshift = N / (2ν)                      # monopole strength for this filling
+νθ     = density .* (2π / Qshift)      # local filling ν(θ): flat value = ν
+
+plot(θc, νθ; lw = 2, xlabel = "θ", ylabel = "local filling  ν(θ)", ylims = (0.0, 0.5),
+     label = "N=10, 10 chains × 10⁶ steps")
+hline!([ν]; ls = :dash, label = "ν = 1/3")
 ```
 
 Running the program above produces:
 
-![Density of the ν = 1/3 composite-fermion ground state, flat at N/4π](assets/quickstart_density.png)
+![Local filling ν(θ) of the ν = 1/3 composite-fermion ground state, a flat plateau at 1/3](assets/quickstart_density.png)
 
-The density is flat to ``\sim 1\%`` across the sphere — the hallmark of the incompressible
-``\nu = 1/3`` liquid. From here, [Tutorial 1](tutorials/01_ground_state.md) explains every step in
+The local filling is a flat plateau at ``\nu = 1/3`` across the sphere — the hallmark of the
+incompressible liquid. From here, [Tutorial 1](tutorials/01_ground_state.md) explains every step in
 detail and adds the pair correlation; later tutorials cover excitations, higher fillings, fast
 unprojected sampling, partons, and energies.
 

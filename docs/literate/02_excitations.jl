@@ -65,10 +65,18 @@ Qqp, lm_qp = cf_quasiparticle_lm(7, n, p)
 θc_qh, n_qh = density_profile(Qqh, p, lm_qh)
 θc_qp, n_qp = density_profile(Qqp, p, lm_qp)
 
-# The excitations sit at the north pole (``\theta = 0``): the quasihole *depletes* the density
-# there, the quasiparticle *enhances* it, while the ground state is flat.
+# We plot the local filling ``\nu(\theta) = 2\pi\,n(\theta)/Q_{\text{shift}}`` (each state with its
+# own ``Q_{\text{shift}} = N/2\nu``), so the bulk sits at ``\nu = 1/3``. The excitations live at the
+# north pole (``\theta = 0``): the quasihole *depletes* the filling there, the quasiparticle
+# *enhances* it, while the ground state is flat. Showing the ``y=0`` baseline keeps the dip/bump in
+# context.
 
-plot(xlabel="θ", ylabel="density  n(θ)", title="ν = 1/3: ground state vs. excitations", legend=:bottom)
-plot!(θc_gs, n_gs; lw=2, label="ground state")
-plot!(θc_qh, n_qh; lw=2, label="quasihole")
-plot!(θc_qp, n_qp; lw=2, label="quasiparticle")
+ν = 1 / 3
+locfill(dens, lm) = dens .* (2π / (length(lm) / (2ν)))   # local filling for a state with these orbitals
+
+plot(xlabel="θ", ylabel="local filling  ν(θ)", ylims=(0.0, 0.7),
+     title="ν = 1/3: ground state vs. excitations", legend=:bottom)
+plot!(θc_gs, locfill(n_gs, lm_gs); lw=2, label="ground state")
+plot!(θc_qh, locfill(n_qh, lm_qh); lw=2, label="quasihole")
+plot!(θc_qp, locfill(n_qp, lm_qp); lw=2, label="quasiparticle")
+hline!([ν]; ls=:dash, color=:black, label="ν = 1/3")

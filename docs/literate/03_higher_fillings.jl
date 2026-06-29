@@ -101,6 +101,12 @@ Qstar, lm = cf_ground_state_lm(N, 2, 4)   # n = 2, p = 4  ⇒  ν = 2/9
 @show Qstar length(lm)
 θc, dens = density_profile(Qstar, 4, lm)
 
-plot(θc, dens; lw=2, marker=:circle, ms=3, label="measured",
-     xlabel="θ", ylabel="density n(θ)", title="ν = 2/9 ground state (N = $N)")
-hline!([N / (4π)]; ls=:dash, label="N / 4π")
+# In magnetic units the bulk is a flat plateau at the filling ``\nu = 2/9`` (using
+# ``Q_{\text{shift}} = N/2\nu``), with the ``y=0`` baseline shown for context.
+ν      = 2 / 9
+Qshift = N / (2ν)
+νθ     = dens .* (2π / Qshift)
+
+plot(θc, νθ; lw=2, marker=:circle, ms=3, label="measured", ylims=(0.0, 0.35),
+     xlabel="θ", ylabel="local filling  ν(θ)", title="ν = 2/9 ground state (N = $N)")
+hline!([ν]; ls=:dash, label="ν = 2/9")
