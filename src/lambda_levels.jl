@@ -5,8 +5,10 @@
     cf_ground_state_lm(N, n, p) -> (Qstar, l_m_list)
 
 Effective monopole strength and occupied `(L, Lz)` orbitals for the CF ground state of `N`
-electrons in `n` filled Λ-levels at filling `ν = n/(2np+1)`:
-`Qstar = (N//n - n)//2`, with all `Lz` filled in Λ-levels `|Qstar| … |Qstar|+|n|-1`.
+electrons in `n` filled Λ-levels at filling `ν = n/(pn+1)`, where `p` is the Jastrow power
+(the number of attached vortices, even) that you pass on to `Ψproj`/`Ψunproj`.
+`Qstar = (N//n - n)//2` (independent of `p`), with all `Lz` filled in Λ-levels
+`|Qstar| … |Qstar|+|n|-1`.
 """
 function cf_ground_state_lm(N::Int, n::Int, p::Int)
     Qstar = (N // n - n) // 2

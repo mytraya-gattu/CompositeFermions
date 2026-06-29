@@ -18,7 +18,7 @@ const global RNG = Random.default_rng()
 # We will now write a function, to which we will pass:
 # 1. the effective monopole strength Qstar felt by composite fermions,
 # 2. their Lambda level occupation (l_m_list) represented as pairs (L, Lz) - L is the angular momentum and Lz the azimuthal quantum number, 
-# 3. p: half the number of flux quanta bound to each electron (to form a CF)
+# 3. p: the number of flux quanta (vortices) bound to each electron (even; p=2 is one pair)
 # 4. num_thermalization: the number of thermalization steps which by default is set to 500_000
 # 4. num_steps: the number of (actual) Monte Carlo steps which by default is set to 1_000_000
 function gibbs_sampler(filename::String, Qstar::Rational{Int64}, l_m_list::Vector{NTuple{2, Rational{Int64}}}, p::Int64, num_thermalization::Int64 = 5 * 10^5, num_steps::Int64 = 10^6)
@@ -177,7 +177,7 @@ function sample_cf_gs(folder_name::String, chain_number::Int64, N::Int64, n::Int
 
     Qstar, l_m_list = cf_ground_state_lm(N, n, p)
 
-    filename = joinpath(folder_name, "data_$(N)_particles_$(n)_$(2*n*p+1)_filling_factor_$(chain_number)_chain_number.jld2")
+    filename = joinpath(folder_name, "data_$(N)_particles_$(n)_$(n*p+1)_filling_factor_$(chain_number)_chain_number.jld2")
 
     gibbs_sampler(filename, Qstar, l_m_list, p, num_thermalization, num_steps)
 
@@ -189,7 +189,7 @@ function sample_cf_qh(folder_name::String, chain_number::Int64, N::Int64, n::Int
 
     Qstar, l_m_list = cf_quasihole_lm(N, n, p)
 
-    filename = joinpath(folder_name, "data_$(N)_particles_$(n)_$(2*n*p+1)_filling_factor_$(chain_number)_chain_number.jld2")
+    filename = joinpath(folder_name, "data_$(N)_particles_$(n)_$(n*p+1)_filling_factor_$(chain_number)_chain_number.jld2")
 
     gibbs_sampler(filename, Qstar, l_m_list, p, num_thermalization, num_steps)
 
@@ -201,7 +201,7 @@ function sample_cf_qp(folder_name::String, chain_number::Int64, N::Int64, n::Int
 
     Qstar, l_m_list = cf_quasiparticle_lm(N, n, p)
 
-    filename = joinpath(folder_name, "data_$(N)_particles_$(n)_$(2*n*p+1)_filling_factor_$(chain_number)_chain_number.jld2")
+    filename = joinpath(folder_name, "data_$(N)_particles_$(n)_$(n*p+1)_filling_factor_$(chain_number)_chain_number.jld2")
     gibbs_sampler(filename, Qstar, l_m_list, p, num_thermalization, num_steps)
 
     return

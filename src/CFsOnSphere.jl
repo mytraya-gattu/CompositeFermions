@@ -1,3 +1,18 @@
+"""
+    CFsOnSphere
+
+Composite-fermion wavefunctions on the Haldane sphere for the fractional quantum Hall effect.
+
+The package builds Jain–Kamilla **projected** (`Ψproj`, `Ψparton`) and **unprojected**
+(`Ψunproj`, `ΨoneLL`) composite-fermion wavefunctions and samples them with a
+Metropolis–Hastings–Gibbs random walk to estimate densities, pair correlations, energies, and
+overlaps. The projection uses the quaternion/rotation reformulation of Jain–Kamilla projection
+([arXiv:2412.09670](https://arxiv.org/abs/2412.09670)): the projected orbital is a sum over a
+Wigner-D matrix times elementary symmetric polynomials of the Jastrow "vortex ratios".
+
+See the [documentation](https://mytraya-gattu.github.io/CompositeFermions/) for tutorials and
+the full API reference.
+"""
 module CFsOnSphere
 
 using LinearAlgebra

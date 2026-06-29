@@ -1,93 +1,68 @@
-# CompositeFermions
-This package currently implements composite fermion wavefunctions in the spherical geometry only (with plans to extend support to other geometries).
-## Jain-Kamilla Projection in Spherical Geometry
+# CFsOnSphere.jl
 
-This repository contains code implementing the **Jain-Kamilla (JK) projection** in spherical geometry, following the approach outlined in [this preprint](https://arxiv.org/abs/2412.09670). The primary application is the **lowest Landau level (LLL) projection** of composite fermion (CF) and, more generally, parton wavefunctions.
+[![Docs (stable)](https://img.shields.io/badge/docs-stable-blue.svg)](https://mytraya-gattu.github.io/CompositeFermions/stable)
+[![Docs (dev)](https://img.shields.io/badge/docs-dev-blue.svg)](https://mytraya-gattu.github.io/CompositeFermions/dev)
+[![CI](https://github.com/mytraya-gattu/CompositeFermions/actions/workflows/CI.yml/badge.svg)](https://github.com/mytraya-gattu/CompositeFermions/actions/workflows/CI.yml)
 
----
+**Composite-fermion wavefunctions on the sphere, for the fractional quantum Hall effect.**
+
+CFsOnSphere builds Jain–Kamilla **projected** and **unprojected** composite-fermion and parton
+wavefunctions on the Haldane sphere, and samples them with a Metropolis–Hastings–Gibbs Monte
+Carlo walk to compute densities, pair correlations, energies, and overlaps. The projection uses
+the quaternion/rotation reformulation of Jain–Kamilla projection
+([arXiv:2412.09670](https://arxiv.org/abs/2412.09670)) — far cheaper and more numerically stable
+than the traditional mixed-derivative approach.
+
+📖 **[Read the documentation →](https://mytraya-gattu.github.io/CompositeFermions/)** — physics
+primer, hands-on tutorials with figures, and the full API reference.
 
 ## Installation
 
-To use this package, follow these steps:
-
-1. **Install Julia**: Download and install Julia from [here](https://julialang.org/downloads/).
-
-2. **Clone this Repository**:  
-   This package is not yet registered with the Julia General Registry. To use it:
-   - Clone the repository:
-     ```bash
-     git clone https://github.com/LordThunder333/CFsOnSphere.git
-     ```
-   - Navigate to the cloned folder.
-
-3. **Activate the Environment**:
-   - **If using Julia REPL**:  
-     Activate the folder by running:
-     ```julia
-     ] activate .
-     ```
-     (This assumes you are in the cloned repository directory when opening the Julia REPL.)
-   - **If running a Julia script**:  
-     Run your script while activating the environment:
-     ```bash
-     julia --project=path_to_folder myscript.jl
-     ```
----
-
-## Usage
-
-This code is designed to work with **single-component composite fermion wavefunctions**, with plans to extend its scope in the future. Below are the typical steps for using the code:
-
-### 1. Identify Occupied Λ-level Orbitals
-Determine all the Λ-level orbitals (Landau levels of composite fermions) needed for your calculation.
-
-### 2. Construct the Wavefunction Object
-Create a wavefunction object `ψ` using the constructor function:
 ```julia
-Ψproj(Qstar, p, N, l_m_list)
+using Pkg
+Pkg.add(url="https://github.com/mytraya-gattu/CompositeFermions.git")
 ```
-- **Parameters**:
-  - `Qstar`: Effective monopole strength (as a rational number).
-  - `p`: The number of vortices bound to each electron.
-  - `N`: Number of electrons in the system.
-  - `l_m_list`: List of occupied Λ levels, represented as tuples `(L, Lz)` where `L` and `Lz` are rational numbers.
 
-### 3. Update the Wavefunction
-Before accessing the composite fermion orbitals for a given position, update the wavefunction:
-- **For all particles**:
-  ```julia
-  update_wavefunction!(ψ, θ, φ)
-  ```
-  Updates the wavefunction assuming every particle is moved to the positions `(θ, φ)`.
+## Quickstart
 
-- **For a single particle**:
-  ```julia
-  update_wavefunction!(ψ, θ[i], φ[i], i)
-  ```
-  Updates the wavefunction assuming only the `i`-th particle is moved to `(θ[i], φ[i])`.
+```julia
+using CFsOnSphere, Random, LinearAlgebra
 
-### 4. Access Results
-After updating the wavefunction:
-- Log of the Jastrow factor:
-  ```julia
-  ψ.jastrow_factor_log
-  ```
-- Elements of the CF Slater determinant:
-  ```julia
-  ψ.slater_det
-  ```
-  Here, rows correspond to different orbitals, and columns correspond to different particles.
+# Filling ν = n/(pn+1); p is the Jastrow power (even). n=1, p=2  →  ν = 1/3.
+N, n, p = 6, 1, 2
+Qstar, l_m_list = cf_ground_state_lm(N, n, p)
 
-### 5. Explore Further
-From this point, users can extend the functionality as needed for their specific calculations.
+ψ, ψ_next = Ψproj(Qstar, p, N, l_m_list), Ψproj(Qstar, p, N, l_m_list)
+logpdf(ψ) = 2.0 * real(logdet(ψ.slater_det) + ψ.jastrow_factor_log)
 
----
+rng = MersenneTwister(1)
+θ, ϕ = rand_θ_ϕ_gen(rng, N)
+θn, ϕn = copy(θ), copy(ϕ)
+iter, σ, _, accept = gibbs_thermalization!(rng, ψ, ψ_next, θ, ϕ, θn, ϕn, π/sqrt(12), logpdf, 10_000)
+@show accept
+```
 
-## Example Files
-We strongly recommend first-time users, especially those new to **Monte Carlo methods** in Haldane’s spherical geometry or the **fractional quantum Hall effect**, to review the provided example files for guidance.
+The [tutorials](https://mytraya-gattu.github.io/CompositeFermions/) turn this into full density,
+pair-correlation, and energy measurements with figures, and cover quasiholes/quasiparticles,
+higher fillings, unprojected Sherman–Morrison sampling, and parton states.
 
+> **Note on `p`.** Throughout the package, `p` is the power of the Jastrow factor
+> ∏(uⱼvₖ−uₖvⱼ)^p — the number of vortices attached per electron (even; `p = 2` is one vortex
+> pair). The filling is **ν = n/(pn+1)**, so the ν = 1/3 Laughlin state is `p = 2`.
 
-## To-do
-1. Upload tables from https://arxiv.org/pdf/cond-mat/9704031 so that a user can run MC chains for all the states listed and benchmark their energies.
-2. Create an automated system for sampling two-component (or more generally multi-component) wavefunctions, especially when the constituent electrons face different effective field.
-3. There are recursive implementations to calculate the Wigner-d matrices. But these are restricted to only integer spins. Currently, a speed comparison between the recursive implementations and the Fourier implementation (used in this package) has not been performed.
+## Wavefunctions
+
+| Type | Description | Fast rank-1 updates? |
+|---|---|---|
+| `Ψproj`   | Jain–Kamilla projected CF state | No (a move changes every column) |
+| `Ψparton` | Jain–Kamilla projected parton state | No |
+| `Ψunproj` | unprojected `det·Jastrow` (single-particle orbitals) | **Yes (Sherman–Morrison)** |
+| `ΨoneLL`  | bare Jastrow (Laughlin) | n/a |
+
+A native, header-only **C++ port** (Eigen + CMake) lives under [`cpp/`](cpp/).
+
+## Citing
+
+If you use this package in published work, please cite
+[arXiv:2412.09670](https://arxiv.org/abs/2412.09670). A BibTeX entry is on the
+[Theory & citation](https://mytraya-gattu.github.io/CompositeFermions/) page.

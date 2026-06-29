@@ -14,7 +14,7 @@ using CFsOnSphere
 using Random
 const global RNG = Random.default_rng()
 
-# Sample the unprojected CF ground state at ν = n/(2np+1) for `N` electrons.
+# Sample the unprojected CF ground state at ν = n/(pn+1) for `N` electrons.
 function gibbs_sampler_unprojected(N::Int64, n::Int64, p::Int64, num_thermalization::Int64 = 5 * 10^5, num_steps::Int64 = 10^6)
 
     # Build the effective monopole strength and Λ-level occupation.
@@ -76,5 +76,5 @@ function gibbs_sampler_unprojected(N::Int64, n::Int64, p::Int64, num_thermalizat
     return θcurrent, ϕcurrent, accumulated_density ./ num_steps, num_accepted / num_steps
 end
 
-# A small smoke run (unprojected ν = 1/3, N = 9 in n = 3 filled Λ-levels).
-# gibbs_sampler_unprojected(9, 3, 1, 10^4, 10^4)
+# A small smoke run (unprojected ν = 3/7, N = 9 in n = 3 filled Λ-levels).
+# gibbs_sampler_unprojected(9, 3, 2, 10^4, 10^4)
