@@ -10,7 +10,7 @@ CFsOnSphere builds Jain–Kamilla **projected** and **unprojected** composite-fe
 wavefunctions on the Haldane sphere, and samples them with a Metropolis–Hastings–Gibbs Monte
 Carlo walk to compute densities, pair correlations, energies, and overlaps. The projection uses
 the quaternion/rotation reformulation of Jain–Kamilla projection
-([arXiv:2412.09670](https://arxiv.org/abs/2412.09670)) — far cheaper and more numerically stable
+([Phys. Rev. Lett. 134, 156501 (2025)](https://doi.org/10.1103/PhysRevLett.134.156501)) — far cheaper and more numerically stable
 than the traditional mixed-derivative approach.
 
 📖 **[Read the documentation →](https://mytraya-gattu.github.io/CompositeFermions/)** — physics
@@ -64,5 +64,5 @@ A native, header-only **C++ port** (Eigen + CMake) lives under [`cpp/`](cpp/).
 ## Citing
 
 If you use this package in published work, please cite
-[arXiv:2412.09670](https://arxiv.org/abs/2412.09670). A BibTeX entry is on the
+[Phys. Rev. Lett. 134, 156501 (2025)](https://doi.org/10.1103/PhysRevLett.134.156501). A BibTeX entry is on the
 [Theory & citation](https://mytraya-gattu.github.io/CompositeFermions/) page.

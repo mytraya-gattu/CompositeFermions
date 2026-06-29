@@ -72,7 +72,7 @@ and ``\mathcal{P}_{\mathrm{LLL}}`` projects the product back into the lowest Lan
 Carrying out ``\mathcal{P}_{\mathrm{LLL}}`` exactly is exponentially expensive. The
 **Jain–Kamilla (JK) projection** makes it tractable by projecting one electron's orbital at a
 time. This package uses the quaternion/rotation reformulation of JK projection
-([arXiv:2412.09670](https://arxiv.org/abs/2412.09670)), in which each projected orbital becomes
+([Phys. Rev. Lett. 134, 156501 (2025)](https://doi.org/10.1103/PhysRevLett.134.156501)), in which each projected orbital becomes
 
 ```math
 \frac{\mathcal{P}_{\mathrm{LLL}}\, Y_{Q^\star,l,m}(\Omega_i)\, J_i}{J_i}
