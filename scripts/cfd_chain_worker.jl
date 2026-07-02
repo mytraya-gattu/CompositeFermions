@@ -89,13 +89,17 @@ println("K = $K configurations over norb = $norb orbitals, guide = configuration
 
 # ---------------------------------------------------------------- disorder
 
-fe = if isempty(disorder_file)
-    HarmonicFieldEvaluator(Int[], Int[], ComplexF64[])
-else
+dis_l, dis_m, dis_V_lm = Int[], Int[], ComplexF64[]
+dis_meta = ""
+if !isempty(disorder_file)
     d = JLD2.load(disorder_file)
     println("loaded disorder potential from: $disorder_file")
-    HarmonicFieldEvaluator(Vector{Int}(d["l"]), Vector{Int}(d["m"]), Vector{ComplexF64}(d["V_lm"]))
+    dis_l    = Vector{Int}(d["l"])
+    dis_m    = Vector{Int}(d["m"])
+    dis_V_lm = Vector{ComplexF64}(d["V_lm"])
+    dis_meta = get(d, "metadata", "")
 end
+fe = HarmonicFieldEvaluator(dis_l, dis_m, dis_V_lm)
 
 # ---------------------------------------------------------------- guide wavefunction
 
@@ -177,6 +181,10 @@ JLD2.jldsave(outfile;
     N = N, twoQ = twoQ, p = p, nmax = nmax,
     stride = stride,
     disorder_file = disorder_file,
+    disorder_l = dis_l,
+    disorder_m = dis_m,
+    disorder_V_lm = dis_V_lm,
+    disorder_metadata = dis_meta,
     orbital_file = orbital_file,
     acceptance_rate = num_accepted / nsteps,
     thermalization_acceptance = acc_therm,
