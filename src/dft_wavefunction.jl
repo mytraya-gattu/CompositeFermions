@@ -13,10 +13,10 @@ using JLD2
 
 # Bring proposal and rand_θ_ϕ_gen from the parent module (CFsOnSphere), which loads
 # MonteCarloOnSphere (exports both) before this module.
-using ..: proposal, rand_θ_ϕ_gen
+using ..CFsOnSphere: proposal, rand_θ_ϕ_gen
 # Extend the generics from SpinPolarizedProjectedWavefunction so all dispatch lives on
 # the same function objects — avoids "both ... export X" ambiguity in CFsOnSphere.
-import ..: gibbs_thermalization!, update_wavefunction!
+import ..CFsOnSphere: gibbs_thermalization!, update_wavefunction!
 
 # -----------------------------------------------------------------------
 # ΨprojDFT: Jain-Kamilla projected CF wavefunction whose N occupied

@@ -76,6 +76,10 @@ if use_dft
     Qstar_orb, p_orb, N_orb, nmax_orb, coeffs = load_dft_orbitals(orbital_file)
     @assert Qstar_orb == Qstar && p_orb == p && N_orb == N "orbital file params mismatch"
     @assert nmax_orb == nmax "nmax mismatch: orbital file has $nmax_orb, requested $nmax"
+    # orbital files made for CFD carry norb > N eigenvectors; the DFT density
+    # loop always fills the N lowest
+    size(coeffs, 2) >= N || error("orbital file has fewer than N eigenvectors")
+    coeffs = coeffs[:, 1:N]
     Ψcurrent = ΨprojDFT(Qstar, 2p, N, nmax, coeffs)
     Ψnext    = ΨprojDFT(Qstar, 2p, N, nmax, coeffs)
     logpdf(ψ::ΨprojDFT) = 2.0 * real(logdet(ψ.slater_det) + ψ.jastrow_factor_log)
