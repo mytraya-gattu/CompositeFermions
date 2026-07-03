@@ -14,7 +14,7 @@
 #   for step ...
 #       update_wavefunction!(ψnext, θ_i, ϕ_i, i)
 #       dr = slater_det_ratio(ψcurrent, ψnext, i)          # O(N)
-#       if 2*real(log(dr) + ψnext.jastrow_factor_log - ψcurrent.jastrow_factor_log) ≥ log(rand())
+#       if 2*real(log(dr) + ψnext.jastrow_factor_log - ψcurrent.jastrow_factor_log) ≥ log(rand(RNG))
 #           update_inverse!(ψcurrent, ψnext, i, dr, temp)  # O(N²); update BEFORE copy!
 #           copy!(ψcurrent, ψnext, i)
 #       else

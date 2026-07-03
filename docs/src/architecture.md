@@ -42,7 +42,9 @@ The two families differ in how a single particle move propagates:
 ## The shared update path
 
 `Ψproj` and `Ψparton` share their update machinery (`_update_pairs!` and the
-`update_wavefunction!` methods in `projected_wavefunction.jl`):
+`update_wavefunction!` methods in `projected_wavefunction.jl`), and `Ψunproj` and `ΨoneLL`
+likewise share their pairwise-Jastrow machinery (`_update_jastrow_pairs!` in
+`unprojected_wavefunction.jl`):
 
 1. Update spinors, pairwise Jastrow log, vortex ratios, and chord distances.
 2. Rebuild the elementary symmetric polynomials per particle ([`get_symmetric_polynomials!`](@ref)).

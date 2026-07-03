@@ -127,7 +127,7 @@ function gibbs_thermalization!(RNG, Ψcurrent::T, Ψnext::T, θcurrent::Vector{F
 
         logpdf_next = logpdf(Ψnext)
 
-        if logpdf_next - logpdf_current >= log(rand())
+        if logpdf_next - logpdf_current >= log(rand(RNG))
 
             θcurrent[sampling_iter] = θnext[sampling_iter]
             ϕcurrent[sampling_iter] = ϕnext[sampling_iter]
@@ -244,13 +244,22 @@ function construct_det_ratios(denominator_rows::Vector{Int64}, numerator_rows::V
 
     intra_denom_diff = [findfirst(isequal(elem), denominator_rows) for elem in denominator_diff]
 
+    k = length(denominator_diff)
+
     function helper!(res, S, Sinv)
 
-        @views @inbounds temp .= S[numerator_diffs_union, :] * Sinv[:, intra_denom_diff]
+        # In-place product: this closure runs once per Monte Carlo step, so avoid the
+        # temporary that `temp .= A * B` would allocate.
+        @views @inbounds mul!(temp, S[numerator_diffs_union, :], Sinv[:, intra_denom_diff])
 
-        @simd for i in eachindex(numerator_rows)
+        @inbounds for i in eachindex(numerator_rows)
 
-            @views @inbounds res[i] = det(temp[iters[:, i],:]) * numerators_signs[i] / denom_sign
+            if k == 1
+                # Single differing row: the "determinant" is a scalar; skip det entirely.
+                res[i] = temp[iters[1, i], 1] * numerators_signs[i] / denom_sign
+            else
+                @views res[i] = det(temp[iters[:, i], :]) * numerators_signs[i] / denom_sign
+            end
 
         end
 

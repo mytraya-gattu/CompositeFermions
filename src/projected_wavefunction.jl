@@ -152,11 +152,7 @@ function Ψproj(Qstar::Rational{Int64}, p::Int64, system_size::Int64, l_m_list::
     wigner_d_matrices = zeros(ComplexF64, length(l_m_list) * (1 + numerator(Lmax - Qstar)), system_size)
     wigner_D_matrices = zeros(ComplexF64, length(l_m_list), 1 + numerator(Lmax - Qstar), system_size)
 
-    reg_coeffs = zeros(Float64, round(Int64, Lmax - Qstar))
-
-    for i in eachindex(reg_coeffs)
-        reg_coeffs[i] = i / ((system_size - 1) - i + 1)
-    end
+    reg_coeffs = jk_reg_coeffs(system_size, numerator(Lmax - Qstar))
 
     return Ψproj(Qstar, p, system_size, l_m_list, Lmax, μ_list, Lz_list, fourier_tot_matrix, U, V, exp_θ, exp_ϕ, dist_matrix, u_v_ratio_matrix, elementary_symmetric_polynomials, reg_coeffs, wigner_d_matrices, wigner_D_matrices, jastrow_factor_log, slater_det)
 end
@@ -230,11 +226,7 @@ function Ψparton(Qstars::Vector{Rational{Int64}}, p::Int64, system_size::Int64,
     wigner_d_matrices = zeros(ComplexF64, sum(length, l_m_lists) * (1 + max_JK), system_size)
     wigner_D_matrices = zeros(ComplexF64, sum(length, l_m_lists), (1 + max_JK), system_size)
 
-    reg_coeffs = zeros(Float64, max_JK)
-
-    for i in eachindex(reg_coeffs)
-        reg_coeffs[i] = (i/(system_size-i))
-    end
+    reg_coeffs = jk_reg_coeffs(system_size, max_JK)
 
     return Ψparton(Qstars, p, system_size, l_m_lists, max_JK, μ_list, Lz_list, fourier_tot_matrix, U, V, exp_θ, exp_ϕ, dist_matrix, u_v_ratio_matrix, elementary_symmetric_polynomials, reg_coeffs, wigner_d_matrices, wigner_D_matrices, jastrow_factor_log, slater_det, trackers)
 end
@@ -278,7 +270,9 @@ function _update_pairs!(Ψ::Union{Ψproj,Ψparton}, θ::Vector{Float64}, ϕ::Vec
     return
 end
 
-# Incremental update for a single moved particle `iter`.
+# Incremental update for a single moved particle `iter`. Each pair is handled in the
+# canonical orientation (a, b) = minmax(i, iter) — the same convention as the full
+# recompute above — with the moved particle carrying the new spinor (unew, vnew).
 function _update_pairs!(Ψ::Union{Ψproj,Ψparton}, θ::Float64, ϕ::Float64, iter::Int64)
 
     @views Ψ.exp_θ[:, iter] .= exp.(-1.0im .* Ψ.μ_list .* θ)
@@ -288,37 +282,24 @@ function _update_pairs!(Ψ::Union{Ψproj,Ψparton}, θ::Float64, ϕ::Float64, it
 
     for i = 1:Ψ.system_size
 
-        if i < iter
+        i == iter && continue
 
-            δv_old = Ψ.U[i] * Ψ.V[iter] - Ψ.V[i] * Ψ.U[iter]
-            δv_new = Ψ.U[i] * vnew -  Ψ.V[i] * unew
+        a, b = minmax(i, iter)
+        ua, va = a == iter ? (unew, vnew) : (Ψ.U[a], Ψ.V[a])
+        ub, vb = b == iter ? (unew, vnew) : (Ψ.U[b], Ψ.V[b])
 
-            δu_new = conj(Ψ.U[i]) * unew + conj(Ψ.V[i]) * vnew
+        δv_old = Ψ.U[a] * Ψ.V[b] - Ψ.V[a] * Ψ.U[b]
 
-            Ψ.u_v_ratio_matrix[iter-1, i] = δu_new / δv_new
-            Ψ.u_v_ratio_matrix[i, iter] = -conj(δu_new) / δv_new
+        δu_new = conj(ua) * ub + conj(va) * vb
+        δv_new = ua * vb - va * ub
 
-            Ψ.jastrow_factor_log += Ψ.p * log(δv_new / δv_old)
+        Ψ.u_v_ratio_matrix[b-1, a] = δu_new / δv_new
+        Ψ.u_v_ratio_matrix[a, b] = -conj(δu_new) / δv_new
 
-            Ψ.dist_matrix[iter-1, i] = 2.0 * abs(δv_new)
-            Ψ.dist_matrix[i, iter] = Ψ.dist_matrix[iter-1, i]
+        Ψ.jastrow_factor_log += Ψ.p * log(δv_new / δv_old)
 
-        elseif i > iter
-
-            δv_old = -Ψ.U[i] * Ψ.V[iter] + Ψ.V[i] * Ψ.U[iter]
-            δv_new = -Ψ.U[i] * vnew +  Ψ.V[i] * unew
-
-            δu_new = (Ψ.U[i]) * conj(unew) + (Ψ.V[i]) * conj(vnew)
-
-            Ψ.u_v_ratio_matrix[i-1, iter] = δu_new / δv_new
-            Ψ.u_v_ratio_matrix[iter, i] = -conj(δu_new) / δv_new
-
-            Ψ.jastrow_factor_log += Ψ.p * log(δv_new / δv_old)
-
-            Ψ.dist_matrix[i-1, iter] = 2.0 * abs(δv_new)
-            Ψ.dist_matrix[iter, i] = Ψ.dist_matrix[i-1, iter]
-
-        end
+        Ψ.dist_matrix[b-1, a] = 2.0 * abs(δv_new)
+        Ψ.dist_matrix[a, b] = Ψ.dist_matrix[b-1, a]
 
     end
 
@@ -338,18 +319,18 @@ function update_wavefunction!(Ψ::Union{Ψproj,Ψparton}, θ::Vector{Float64}, �
     _update_pairs!(Ψ, θ, ϕ)
 
     b = _esp_order(Ψ)
-    @simd for electron_iter in axes(Ψ.elementary_symmetric_polynomials, 2)
+    for electron_iter in axes(Ψ.elementary_symmetric_polynomials, 2)
         @inbounds @views get_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, electron_iter], Ψ.u_v_ratio_matrix[:, electron_iter], b, Ψ.reg_coeffs)
     end
 
     mul!(Ψ.wigner_d_matrices, Ψ.fourier_tot_matrix, Ψ.exp_θ)
     Ψ.wigner_D_matrices .= reshape(Ψ.wigner_d_matrices, size(Ψ.wigner_D_matrices))
 
-    @simd for iter in axes(Ψ.wigner_D_matrices, 3)
+    for iter in axes(Ψ.wigner_D_matrices, 3)
         @inbounds @views Ψ.wigner_D_matrices[:, :, iter] .*= Ψ.exp_ϕ[:, iter]
     end
 
-    @simd for iter in axes(Ψ.slater_det, 2)
+    for iter in axes(Ψ.slater_det, 2)
         @inbounds @views mul!(Ψ.slater_det[:, iter], Ψ.wigner_D_matrices[:, :, iter], Ψ.elementary_symmetric_polynomials[:, iter])
     end
 
@@ -368,7 +349,7 @@ function update_wavefunction!(Ψ::Union{Ψproj,Ψparton}, θ::Float64, ϕ::Float
     _update_pairs!(Ψ, θ, ϕ, iter)
 
     b = _esp_order(Ψ)
-    @simd for electron_iter in axes(Ψ.elementary_symmetric_polynomials, 2)
+    for electron_iter in axes(Ψ.elementary_symmetric_polynomials, 2)
         @inbounds @views get_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, electron_iter], Ψ.u_v_ratio_matrix[:, electron_iter], b, Ψ.reg_coeffs)
     end
 
@@ -379,7 +360,7 @@ function update_wavefunction!(Ψ::Union{Ψproj,Ψparton}, θ::Float64, ϕ::Float
     @inbounds @views Ψ.wigner_D_matrices[:, :, iter] .= reshape(Ψ.wigner_d_matrices[:, iter], nr, nc)
     @inbounds @views Ψ.wigner_D_matrices[:, :, iter] .*= Ψ.exp_ϕ[:, iter]
 
-    @simd for electron_iter in axes(Ψ.slater_det, 2)
+    for electron_iter in axes(Ψ.slater_det, 2)
         @inbounds @views mul!(Ψ.slater_det[:, electron_iter], Ψ.wigner_D_matrices[:, :, electron_iter], Ψ.elementary_symmetric_polynomials[:, electron_iter])
     end
 

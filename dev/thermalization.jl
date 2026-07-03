@@ -32,7 +32,7 @@ function thermalization_step!(RNG::AbstractRNG, logpdf!::Function, obj_current::
     logpdf!(obj_next)
 
     sample_accepted::Bool = false
-    if obj_next.logpdf - obj_current.logpdf >= log(rand())
+    if obj_next.logpdf - obj_current.logpdf >= log(rand(RNG))
 
         copy!(obj_current, obj_next, sampling_iter)
         sample_accepted = true

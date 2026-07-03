@@ -9,6 +9,57 @@
 # `ΨoneLL` is the bare Jastrow (Laughlin ν = 1/(2p+1)) wavefunction with no Slater
 # determinant.
 
+# --- Pairwise Jastrow data (U, V, jastrow log, distances), shared by Ψunproj/ΨoneLL ---
+# (`Ψproj`/`Ψparton` have their own `_update_pairs!` that additionally tracks the vortex
+# ratio matrix; see projected_wavefunction.jl.)
+
+# Full recompute from all positions.
+function _update_jastrow_pairs!(Ψ, θ::Vector{Float64}, ϕ::Vector{Float64})
+
+    # In-place spinor coordinates (avoid allocating fresh U/V each call).
+    Ψ.U .= cos.(θ ./ 2) .* exp.(0.5im .* ϕ)
+    Ψ.V .= sin.(θ ./ 2) .* exp.(-0.5im .* ϕ)
+
+    Ψ.jastrow_factor_log = zero(ComplexF64)
+    for i = 1:Ψ.system_size-1
+        for j = i+1:Ψ.system_size
+            δv = Ψ.U[i] * Ψ.V[j] - Ψ.V[i] * Ψ.U[j]
+            Ψ.jastrow_factor_log += Ψ.p * log(δv)
+            Ψ.dist_matrix[j-1, i] = 2.0 * abs(δv)
+            Ψ.dist_matrix[i, j] = Ψ.dist_matrix[j-1, i]
+        end
+    end
+
+    return
+end
+
+# Incremental update for a single moved particle `iter`. Written for the pair (i, iter) in
+# the same orientation for every `i`: relative to the canonical (a, b) = minmax(i, iter)
+# ordering this flips the sign of δv when i > iter, but the sign cancels in both the ratio
+# δv_new/δv_old and in |δv_new|, so one loop body covers both sides.
+function _update_jastrow_pairs!(Ψ, θ::Float64, ϕ::Float64, iter::Int64)
+
+    unew, vnew = u_v_generator(θ, ϕ)
+    uold, vold = Ψ.U[iter], Ψ.V[iter]
+
+    for i = 1:Ψ.system_size
+        i == iter && continue
+
+        δv_old = Ψ.U[i] * vold - Ψ.V[i] * uold
+        δv_new = Ψ.U[i] * vnew - Ψ.V[i] * unew
+
+        Ψ.jastrow_factor_log += Ψ.p * log(δv_new / δv_old)
+
+        a, b = minmax(i, iter)
+        Ψ.dist_matrix[b-1, a] = 2.0 * abs(δv_new)
+        Ψ.dist_matrix[a, b] = Ψ.dist_matrix[b-1, a]
+    end
+
+    Ψ.U[iter], Ψ.V[iter] = unew, vnew
+
+    return
+end
+
 """
     Ψunproj
 
@@ -113,21 +164,10 @@ function update_wavefunction!(ψ::Ψunproj, θ::Vector{Float64}, ϕ::Vector{Floa
     ψ.exp_θ .= exp.(-1.0im .* ψ.μ_list .* transpose(θ))
     ψ.exp_ϕ .= exp.(1.0im .* ψ.Lz_list .* transpose(ϕ))
 
-    ψ.U .= cos.(θ ./ 2) .* exp.(0.5im .* ϕ)
-    ψ.V .= sin.(θ ./ 2) .* exp.(-0.5im .* ϕ)
+    _update_jastrow_pairs!(ψ, θ, ϕ)
 
     mul!(ψ.slater_det, ψ.fourier_tot_matrix, ψ.exp_θ)
     ψ.slater_det .*= ψ.exp_ϕ
-
-    ψ.jastrow_factor_log = zero(ComplexF64)
-    for i = 1:ψ.system_size-1
-        for j = i+1:ψ.system_size
-            δv = ψ.U[i] * ψ.V[j] - ψ.V[i] * ψ.U[j]
-            ψ.jastrow_factor_log += ψ.p * log(δv)
-            ψ.dist_matrix[j-1, i] = 2.0 * abs(δv)
-            ψ.dist_matrix[i, j] = ψ.dist_matrix[j-1, i]
-        end
-    end
 
     return
 end
@@ -141,37 +181,7 @@ particle orbital). Modifies `ψ` in place.
 """
 function update_wavefunction!(ψ::Ψunproj, θ::Float64, ϕ::Float64, iter::Int64)
 
-    unew, vnew = u_v_generator(θ, ϕ)
-    uold, vold = ψ.U[iter], ψ.V[iter]
-
-    for i = 1:ψ.system_size
-
-        if i < iter
-
-            δv_old = ψ.U[i] * vold - ψ.V[i] * uold
-            δv_new = ψ.U[i] * vnew - ψ.V[i] * unew
-
-            ψ.jastrow_factor_log += ψ.p * log(δv_new / δv_old)
-
-            ψ.dist_matrix[iter-1, i] = 2.0 * abs(δv_new)
-            ψ.dist_matrix[i, iter] = ψ.dist_matrix[iter-1, i]
-
-        elseif i > iter
-
-            δv_old = -ψ.U[i] * vold + ψ.V[i] * uold
-            δv_new = -ψ.U[i] * vnew + ψ.V[i] * unew
-
-            ψ.jastrow_factor_log += ψ.p * log(δv_new / δv_old)
-
-            ψ.dist_matrix[i-1, iter] = 2.0 * abs(δv_new)
-            ψ.dist_matrix[iter, i] = ψ.dist_matrix[i-1, iter]
-
-        end
-
-    end
-
-    ψ.U[iter] = unew
-    ψ.V[iter] = vnew
+    _update_jastrow_pairs!(ψ, θ, ϕ, iter)
 
     @views ψ.exp_θ[:, iter] .= exp.(-1.0im .* ψ.μ_list .* θ)
     @views ψ.exp_ϕ[:, iter] .= exp.(1.0im .* ψ.Lz_list .* ϕ)
@@ -257,62 +267,11 @@ function ΨoneLL(p::Int64, system_size::Int64)
     return ΨoneLL(p, system_size, U, V, dist_matrix, jastrow_factor_log)
 end
 
-function update_wavefunction!(Ψ::ΨoneLL, θ::Vector{Float64}, ϕ::Vector{Float64})
+update_wavefunction!(Ψ::ΨoneLL, θ::Vector{Float64}, ϕ::Vector{Float64}) =
+    _update_jastrow_pairs!(Ψ, θ, ϕ)
 
-    Ψ.jastrow_factor_log = zero(ComplexF64)
-
-    Ψ.U, Ψ.V = u_v_generator(θ, ϕ)
-
-    for i = 1:Ψ.system_size-1
-        for j = i+1:Ψ.system_size
-
-            δv = Ψ.U[i] * Ψ.V[j] - Ψ.V[i] * Ψ.U[j]
-
-            Ψ.jastrow_factor_log += Ψ.p * log(δv)
-
-            Ψ.dist_matrix[j-1, i] = 2.0 * abs(δv)
-            Ψ.dist_matrix[i, j] = Ψ.dist_matrix[j-1, i]
-
-        end
-    end
-
-    return
-end
-
-function update_wavefunction!(Ψ::ΨoneLL, θ::Float64, ϕ::Float64, iter::Int64)
-
-    unew, vnew = u_v_generator(θ, ϕ)
-
-    for i = 1:Ψ.system_size
-
-        if i < iter
-
-            δv_old = Ψ.U[i] * Ψ.V[iter] - Ψ.V[i] * Ψ.U[iter]
-            δv_new = Ψ.U[i] * vnew -  Ψ.V[i] * unew
-
-            Ψ.jastrow_factor_log += Ψ.p * log(δv_new / δv_old)
-
-            Ψ.dist_matrix[iter-1, i] = 2.0 * abs(δv_new)
-            Ψ.dist_matrix[i, iter] = Ψ.dist_matrix[iter-1, i]
-
-        elseif i > iter
-
-            δv_old = -Ψ.U[i] * Ψ.V[iter] + Ψ.V[i] * Ψ.U[iter]
-            δv_new = -Ψ.U[i] * vnew +  Ψ.V[i] * unew
-
-            Ψ.jastrow_factor_log += Ψ.p * log(δv_new / δv_old)
-
-            Ψ.dist_matrix[i-1, iter] = 2.0 * abs(δv_new)
-            Ψ.dist_matrix[iter, i] = Ψ.dist_matrix[i-1, iter]
-
-        end
-
-    end
-
-    Ψ.U[iter], Ψ.V[iter] = unew, vnew
-
-    return
-end
+update_wavefunction!(Ψ::ΨoneLL, θ::Float64, ϕ::Float64, iter::Int64) =
+    _update_jastrow_pairs!(Ψ, θ, ϕ, iter)
 
 function Base.copy!(Ψ1::ΨoneLL, Ψ2::ΨoneLL)
 

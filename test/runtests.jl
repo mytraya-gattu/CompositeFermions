@@ -50,6 +50,100 @@ using LinearAlgebra
         @test isapprox(std(real.(res)), 0.0, atol=1e-10)
     end
 
+    @testset "Ψproj real-move incremental vs full rebuild" begin
+        rng = MersenneTwister(12)
+        N, n, p = 9, 3, 2
+        Qstar, l_m_list = cf_ground_state_lm(N, n, p)
+        θ, ϕ = rand_θ_ϕ_gen(rng, N)
+
+        ψi = Ψproj(Qstar, p, N, l_m_list)
+        update_wavefunction!(ψi, θ, ϕ)
+        for i in 1:N
+            θ[i], ϕ[i] = proposal(rng, θ[i], ϕ[i], 0.5)
+            update_wavefunction!(ψi, θ[i], ϕ[i], i)
+        end
+
+        ψf = Ψproj(Qstar, p, N, l_m_list)
+        update_wavefunction!(ψf, θ, ϕ)
+
+        @test maximum(abs.(ψi.slater_det .- ψf.slater_det)) < 1e-10
+        @test maximum(abs.(ψi.u_v_ratio_matrix .- ψf.u_v_ratio_matrix)) < 1e-10
+        @test maximum(abs.(ψi.dist_matrix .- ψf.dist_matrix)) < 1e-10
+        # Imaginary part of the Jastrow log differs by 2πk (branch cut); compare real part.
+        @test abs(real(ψi.jastrow_factor_log - ψf.jastrow_factor_log)) < 1e-9
+    end
+
+    @testset "Ψparton real-move incremental vs full rebuild" begin
+        rng = MersenneTwister(13)
+        N, p = 12, 2
+        # Two parton sectors that both hold N = 12 fermions: n = 3 (Q* = 1/2) and
+        # n = 2 (Q* = 2) filled Λ-levels.
+        Qstar3, lm3 = cf_ground_state_lm(N, 3, p)
+        Qstar2, lm2 = cf_ground_state_lm(N, 2, p)
+        Qstars = [Qstar3, Qstar2]
+        l_m_lists = [lm3, lm2]
+        θ, ϕ = rand_θ_ϕ_gen(rng, N)
+
+        ψi = Ψparton(Qstars, p, N, l_m_lists)
+        update_wavefunction!(ψi, θ, ϕ)
+        for i in 1:N
+            θ[i], ϕ[i] = proposal(rng, θ[i], ϕ[i], 0.5)
+            update_wavefunction!(ψi, θ[i], ϕ[i], i)
+        end
+
+        ψf = Ψparton(Qstars, p, N, l_m_lists)
+        update_wavefunction!(ψf, θ, ϕ)
+
+        @test size(ψi.slater_det) == (length(lm3) + length(lm2), N)
+        @test maximum(abs.(ψi.slater_det .- ψf.slater_det)) < 1e-10
+        @test abs(real(ψi.jastrow_factor_log - ψf.jastrow_factor_log)) < 1e-9
+    end
+
+    @testset "ΨoneLL full-vs-incremental consistency" begin
+        rng = MersenneTwister(14)
+        N, p = 12, 3   # ν = 1/3 Laughlin
+        θ, ϕ = rand_θ_ϕ_gen(rng, N)
+
+        ψi = ΨoneLL(p, N)
+        update_wavefunction!(ψi, θ, ϕ)
+        for i in 1:N
+            θ[i], ϕ[i] = proposal(rng, θ[i], ϕ[i], 0.5)
+            update_wavefunction!(ψi, θ[i], ϕ[i], i)
+        end
+
+        ψf = ΨoneLL(p, N)
+        update_wavefunction!(ψf, θ, ϕ)
+
+        @test maximum(abs.(ψi.U .- ψf.U)) < 1e-12
+        @test maximum(abs.(ψi.dist_matrix .- ψf.dist_matrix)) < 1e-10
+        @test abs(real(ψi.jastrow_factor_log - ψf.jastrow_factor_log)) < 1e-9
+    end
+
+    @testset "construct_det_ratios" begin
+        rng = MersenneTwister(21)
+        N = 6
+        S = complex.(randn(rng, N + 2, N), randn(rng, N + 2, N))
+        denominator_rows = collect(1:N)
+        Sinv = inv(S[denominator_rows, :])
+        ref(rows) = det(S[rows, :]) / det(S[denominator_rows, :])
+
+        # Single differing row (the k = 1 fast path).
+        nums1 = [vcat(collect(1:N-1), [N+1]), vcat(collect(1:N-1), [N+2])]
+        helper1! = construct_det_ratios(denominator_rows, nums1)
+        res1 = zeros(ComplexF64, length(nums1))
+        helper1!(res1, S, Sinv)
+        @test all(abs.(res1 .- ref.(nums1)) .< 1e-10)
+
+        # Two differing rows, including permuted row orders (sign bookkeeping).
+        nums2 = [vcat(collect(1:N-2), [N+1, N+2]),
+                 vcat(collect(1:N-2), [N+2, N+1]),
+                 vcat([N+1], collect(1:N-2), [N-1])]
+        helper2! = construct_det_ratios(denominator_rows, nums2)
+        res2 = zeros(ComplexF64, length(nums2))
+        helper2!(res2, S, Sinv)
+        @test all(abs.(res2 .- ref.(nums2)) .< 1e-10)
+    end
+
     @testset "Λ-level builders" begin
         Qstar, lm = cf_ground_state_lm(9, 3, 1)
         @test Qstar == 0//1

@@ -69,6 +69,15 @@ function get_symmetric_polynomials!(dest, roots, b)
 end
 
 """
+    jk_reg_coeffs(system_size, b) -> Vector{Float64}
+
+The ESP regularization coefficients used by `Ψproj`/`Ψparton`: `reg_coeffs[i] = i/(N-i)`
+with `N = system_size`, so the running product `∏_{i=1}^{k} reg_coeffs[i] = 1/C(N-1, k)`
+(the JK normalization consumed by the regularized `get_symmetric_polynomials!` below).
+"""
+jk_reg_coeffs(system_size::Int64, b::Int64) = [i / (system_size - i) for i in 1:b]
+
+"""
     get_symmetric_polynomials!(dest, roots, b::Int, reg_coeffs)
 
 In-place, regularized variant: `dest[k+1]` holds the degree-`k` elementary symmetric

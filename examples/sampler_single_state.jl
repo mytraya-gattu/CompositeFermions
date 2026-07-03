@@ -112,7 +112,7 @@ function gibbs_sampler(filename::String, Qstar::Rational{Int64}, l_m_list::Vecto
         logpdf_next = logpdf(Ψnext)
 
         # We now accept or reject the proposed state according to the Metropolis-Hastings criterion.
-        if logpdf_next - logpdf_current >= log(rand()) 
+        if logpdf_next - logpdf_current >= log(rand(RNG))
 
             # If the proposed state is accepted, we update the inter-particle distance distribution.
             for i in 1:system_size-1
