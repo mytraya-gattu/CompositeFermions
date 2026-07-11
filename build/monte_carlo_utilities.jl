@@ -27,8 +27,8 @@ function rand_θ_ϕ_gen(RNG, n_samples::Int)
     ϕlist = zeros(Float64, n_samples)
     @simd for i in axes(Xmat, 2)
         # x = randn(RNG, Float64, 3)
-        @inbounds @views sph  = SphericalFromCartesian()(Xmat[:, i])
-        θlist[i], ϕlist[i] = pi/2-sph.ϕ, sph.θ
+        @inbounds @views sph = SphericalFromCartesian()(Xmat[:, i])
+        θlist[i], ϕlist[i] = pi / 2 - sph.ϕ, sph.θ
     end
     return θlist, ϕlist
 end
@@ -76,7 +76,7 @@ function proposal(RNG, θcurrent::Float64, ϕcurrent::Float64, σ::Float64)
     x = SA[v[2], v[3], v[4]]
 
     sph = SphericalFromCartesian()(x)
-    return pi/2-sph.ϕ, sph.θ
+    return pi / 2 - sph.ϕ, sph.θ
 end
 
 """
@@ -85,7 +85,7 @@ Returns parameters for ARM scheme for step size adapation to maintain acceptance
 function arm_parameters(ideal_acceptance_ratio::Float64, r::Float64)
     a = 1.0
     b = 0.0
-    for i = 1:1000
+    for i in 1:1000
         c = (a * ideal_acceptance_ratio + b)^r
         a = (a * ideal_acceptance_ratio + b)^(1 / r) - c
         b = c
@@ -134,7 +134,7 @@ function construct_det_ratios(denominator_rows::Vector{Int64}, numerator_rows::V
 
     ### First, we need to identify all the common elements between the denominator and numerator rows.
     common_elements = copy(denominator_rows) ### Okay.
-    
+
     for numerator_row in numerator_rows
         common_elements = intersect(common_elements, numerator_row)
     end
@@ -148,7 +148,7 @@ function construct_det_ratios(denominator_rows::Vector{Int64}, numerator_rows::V
     for i in eachindex(numerator_rows)
 
         numerator_diff = numerator_diffs[i]
-        
+
         for j in eachindex(denominator_diff)
 
             iters[j, i] = findfirst(isequal(numerator_diff[j]), numerator_diffs_union)
@@ -158,11 +158,11 @@ function construct_det_ratios(denominator_rows::Vector{Int64}, numerator_rows::V
     end
 
     function get_sign(rows1, rows2)
-        
+
         p = [findfirst(isequal(elem), rows1) for elem in rows2]
 
         return levicivita(p)
-        
+
     end
 
     denom_sign = get_sign(denominator_rows, vcat(denominator_diff, common_elements))
@@ -178,13 +178,13 @@ function construct_det_ratios(denominator_rows::Vector{Int64}, numerator_rows::V
 
         @simd for i in eachindex(numerator_rows)
 
-            @views @inbounds res[i] = det(temp[iters[:, i],:]) * numerators_signs[i] / denom_sign
+            @views @inbounds res[i] = det(temp[iters[:, i], :]) * numerators_signs[i] / denom_sign
 
         end
 
         return
     end
-    
+
     return helper!
 
 end

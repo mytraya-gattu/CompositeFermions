@@ -44,26 +44,26 @@ function thermalization_step!(RNG::AbstractRNG, logpdf!::Function, obj_current::
 
 end
 
-function thermalize!(RNG::AbstractRNG, Ψcurrent::Ψproj, θcurrent::Vector{Float64}, ϕcurrent::Vector{Float64}, logpdf::Function, num_thermalization::Int64=5*10^5, σ0::Float64=pi / sqrt(12.0))
+function thermalize!(RNG::AbstractRNG, Ψcurrent::Ψproj, θcurrent::Vector{Float64}, ϕcurrent::Vector{Float64}, logpdf::Function, num_thermalization::Int64 = 5 * 10^5, σ0::Float64 = pi / sqrt(12.0))
 
     update_wavefunction!(Ψcurrent, θcurrent, ϕcurrent)
     obj_current = ThermalizationState(Ψcurrent, θcurrent, ϕcurrent, 0.0)
 
     function logpdf!(obj::ThermalizationState)
         obj.logpdf = logpdf(obj.ψ) ## Okay this is good, I think at least.
-        return    
+        return
     end
-    
+
     logpdf!(obj_current)
     obj_next = copy(obj_current)
 
-    acceptance_target::Float64 = 0.50 ### Gibbs sampling.
+    acceptance_target::Float64 = 0.5 ### Gibbs sampling.
     a::Float64, b::Float64 = arm_parameters(acceptance_target, 3.0)
 
     num_samples_accepted_thermalization::Int64 = 0
     δ::Float64 = 1.0
 
-    σ = σ0 
+    σ = σ0
     tuning_schedule::Vector{Int64} = round.(Int64, exp.(LinRange(log(10.0), log(num_thermalization), 25)))
     sampling_iter::Int64 = 1
     t0::Float64 = time()
@@ -74,7 +74,7 @@ function thermalize!(RNG::AbstractRNG, Ψcurrent::Ψproj, θcurrent::Vector{Floa
 
         if monte_carlo_iter in tuning_schedule
 
-            δ = arm_scale_factor(num_samples_accepted_thermalization/monte_carlo_iter, acceptance_target, a, b)
+            δ = arm_scale_factor(num_samples_accepted_thermalization / monte_carlo_iter, acceptance_target, a, b)
 
             σ *= δ
 
@@ -83,5 +83,5 @@ function thermalize!(RNG::AbstractRNG, Ψcurrent::Ψproj, θcurrent::Vector{Floa
 
     end
 
-    return time()-t0, σ, num_samples_accepted_thermalization/num_thermalization
+    return time() - t0, σ, num_samples_accepted_thermalization / num_thermalization
 end

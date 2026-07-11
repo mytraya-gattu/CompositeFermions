@@ -16,7 +16,7 @@ function get_symmetric_polynomials(roots, b) ## For reference only.
 
         for j in min(i, b):-1:1
 
-            @inbounds dest[j+1] += roots[i] * dest[j]
+            @inbounds dest[j + 1] += roots[i] * dest[j]
 
         end
 
@@ -40,7 +40,7 @@ Calculate the first `b` elementary symmetric polynomials for the given roots.
 function get_symmetric_polynomials!(dest, roots, b)
 
     dest[1] = one(eltype(dest))
-    
+
     if b == 0
         return
     elseif b == 1
@@ -56,7 +56,7 @@ function get_symmetric_polynomials!(dest, roots, b)
 
         for j in min(i, b):-1:1
 
-            @inbounds dest[j+1] += r * dest[j]
+            @inbounds dest[j + 1] += r * dest[j]
 
         end
 
@@ -81,7 +81,7 @@ Calculate the first `b` elementary symmetric polynomials for the given roots reg
 function get_symmetric_polynomials!(dest, roots, b, reg_coeffs)
 
     dest[1] = one(eltype(dest))
-    
+
     if b == 0
         return
     elseif b == 1
@@ -95,8 +95,8 @@ function get_symmetric_polynomials!(dest, roots, b, reg_coeffs)
         r = roots[i]
         for j in min(i, b):-1:1
 
-            @inbounds dest[j+1] += r * dest[j] * reg_coeffs[j]
-            
+            @inbounds dest[j + 1] += r * dest[j] * reg_coeffs[j]
+
         end
 
     end

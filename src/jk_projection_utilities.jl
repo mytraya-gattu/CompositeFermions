@@ -18,7 +18,7 @@ end
 
 function projection_coeff(L, Qstar, Q1, m)
 
-    return exp(custom_logbinomial(2 * Q1, L - Qstar) + custom_logbinomial(L - Qstar, m - Qstar) + 0.50 * custom_logbinomial(2 * L, L + Qstar) - custom_logbinomial(2 * Q1 + L + Qstar + 1, L - Qstar) - 0.50 * custom_logbinomial(2 * L, L + m))
+    return exp(custom_logbinomial(2 * Q1, L - Qstar) + custom_logbinomial(L - Qstar, m - Qstar) + 0.5 * custom_logbinomial(2 * L, L + Qstar) - custom_logbinomial(2 * Q1 + L + Qstar + 1, L - Qstar) - 0.5 * custom_logbinomial(2 * L, L + m))
 
 end
 
