@@ -21,6 +21,9 @@ using JLD2
 using Combinatorics
 using Serialization
 using SpecialFunctions: loggamma
+using Statistics: std
+using Distributed
+using Printf
 
 LinearAlgebra.BLAS.set_num_threads(1)
 
@@ -40,6 +43,8 @@ include("unprojected_wavefunction.jl")    # Ψunproj, ΨoneLL
 include("slater_inverse.jl")              # Sherman-Morrison (Ψunproj) + extended Slater
 include("lambda_levels.jl")               # l_m_list builders
 include("monte_carlo.jl")                 # proposal, ARM, gibbs_thermalization!, density
+include("diagnostics.jl")                 # split-R̂, effective sample size
+include("chain_driver.jl")                # gibbs_sampling!, run_chains, monitor/combine
 
 export
     # Wavefunction types
@@ -53,6 +58,11 @@ export
     cf_ground_state_lm, cf_quasihole_lm, cf_quasiparticle_lm,
     # Monte Carlo
     rand_θ_ϕ_gen, proposal, gibbs_thermalization!, update_density!, construct_det_ratios,
+    # Convergence diagnostics
+    split_rhat, effective_sample_size,
+    # Multi-chain distributed driver
+    gibbs_sampling!, run_chains, monitor_chains, combine_chains, sample_density_chains,
+    ChainStatusReport,
     # Misc
     legendre_polynomials!,
     # Re-exported utilities
