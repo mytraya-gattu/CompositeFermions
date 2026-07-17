@@ -56,3 +56,23 @@ accumulators.
 Modules = [CFsOnSphere]
 Pages   = ["monte_carlo.jl"]
 ```
+
+## Convergence diagnostics
+
+Split-R̂ (Gelman–Rubin) and the effective sample size (Geyer's initial positive sequence),
+implemented by hand.
+
+```@autodocs
+Modules = [CFsOnSphere]
+Pages   = ["diagnostics.jl"]
+```
+
+## Multi-chain distributed driver
+
+The reusable measurement loop, the `Distributed` multi-chain driver, and the checkpoint
+monitoring / pooling helpers.
+
+```@autodocs
+Modules = [CFsOnSphere]
+Pages   = ["chain_driver.jl"]
+```

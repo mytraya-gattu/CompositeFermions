@@ -37,6 +37,7 @@ makedocs(
             "5 — Parton states"                   => tutorial_md("05_partons.md"),
             "6 — Observables & energies"          => tutorial_md("06_observables.md"),
             "7 — Under the hood"                  => tutorial_md("07_under_the_hood.md"),
+            "8 — Parallel chains & diagnostics"   => tutorial_md("08_parallel_chains.md"),
         ],
         "API reference"  => "api.md",
         "Architecture"   => "architecture.md",
