@@ -3,8 +3,15 @@ using Random
 using Test
 using Statistics
 using LinearAlgebra
+using Distributed
 
-@testset "CFsOnSphere.jl" begin
+# Test-group selection: `julia --project=. test/runtests.jl <group>...` runs only the named
+# groups (so each testset can be exercised as a separate command per the test policy), while
+# `Pkg.test()` (no args) runs every group. Groups: core, diagnostics, serial, distributed, resume.
+const SELECTED = isempty(ARGS) ? ["all"] : ARGS
+rungroup(name) = ("all" in SELECTED) || (name in SELECTED)
+
+rungroup("core") && @testset "CFsOnSphere.jl" begin
 
     # Deterministic seed: the full-vs-incremental consistency check below is exact for any
     # non-(near-)singular configuration, but an unseeded RNG can occasionally land on a
@@ -316,4 +323,127 @@ using LinearAlgebra
         @test isfinite(real(logdet(ψ.slater_det)))
     end
 
+end
+
+# ---------------------------------------------------------------------------------------------
+# Convergence diagnostics (split-R̂, effective sample size).
+# ---------------------------------------------------------------------------------------------
+rungroup("diagnostics") && @testset "diagnostics: split-R̂ and ESS" begin
+
+    # (a) Four iid N(0,1) chains of 10_000 draws: well-mixed, ESS near the true value N.
+    rng = Xoshiro(20240718)
+    chains = [randn(rng, 10_000) for _ in 1:4]
+    @test split_rhat(chains) < 1.01
+
+    e1 = effective_sample_size(chains[1])
+    @test 8_000 < e1 <= 10_000            # iid single chain: ESS ≈ N
+    em = effective_sample_size(chains)
+    @test 32_000 < em <= 40_000           # iid pooled: ESS ≈ 4N
+
+    # AR(1) with φ = 0.8: ESS ≈ N·(1-φ)/(1+φ) — a known limiting case for the estimator.
+    φ = 0.8; n = 20_000; x = zeros(n); r2 = Xoshiro(7)
+    for i in 2:n; x[i] = φ * x[i-1] + randn(r2); end
+    ar = effective_sample_size(x)
+    @test ar < n / 3
+    @test isapprox(ar, n * (1 - φ) / (1 + φ); rtol = 0.15)
+
+    # (b) Two chains offset by 5σ: strongly non-mixed, split-R̂ ≫ 1.
+    c1 = randn(Xoshiro(1), 5_000)
+    c2 = randn(Xoshiro(2), 5_000) .+ 5.0
+    @test split_rhat([c1, c2]) > 2.0
+
+    # (c) Degenerate inputs must return NaN / a sane value, never throw.
+    @test isnan(split_rhat([randn(100)]))                         # single chain
+    @test isnan(split_rhat([fill(3.0, 100), fill(3.0, 100)]))     # constant traces
+    @test isnan(effective_sample_size(fill(3.0, 100)))            # constant trace
+    @test effective_sample_size([1.0]) == 1.0                     # too-short trace
+    @test isnan(split_rhat([[1.0, 2.0], [1.0, 2.0]]))             # traces shorter than 4
+end
+
+# ---------------------------------------------------------------------------------------------
+# Multi-chain driver, serial (in-process) path: nprocs() == 1 runs the chains sequentially.
+# ---------------------------------------------------------------------------------------------
+rungroup("serial") && @testset "driver serial (in-process)" begin
+
+    ref = load(joinpath(@__DIR__, "data_10_particles_1_3_filling_factor_1_chain_number.jld2"))
+
+    dir = mktempdir()
+    res = sample_density_chains(dir, 10, 1, 2; n_chains = 2, seed = 2718,
+                                num_thermalization = 10_000, num_steps = 50_000,
+                                record_every = 500, checkpoint_every = 25_000)
+
+    @test isfile(joinpath(dir, "chain_1.jld2"))
+    @test isfile(joinpath(dir, "chain_2.jld2"))
+
+    rep = monitor_chains(dir)
+    @test rep.n_read == 2
+    @test all(0.35 .< rep.acceptance .< 0.65)   # ARM targets 0.50
+    @test isfinite(rep.rhat)
+
+    d = res["observables"]["density"]
+    @test length(d) == length(ref["density"])   # same 499-bin mesh as the reference
+    @test res["grids"]["theta grid"] ≈ ref["theta grid"]
+
+    # The reference is a single 10^6-step chain; this is 2×5·10^4 steps, so per-bin MC noise is
+    # large. Compare the *interior mean density level* (bulk plateau) and the overall level,
+    # which are robust to bin-by-bin noise, rather than pointwise densities.
+    bulk = 100:400
+    @test isapprox(mean(d[bulk]), mean(ref["density"][bulk]); rtol = 0.03)
+    @test isapprox(sum(d) / length(d), sum(ref["density"]) / length(ref["density"]); rtol = 0.02)
+    @test isapprox(sum(d) / length(d), 10 / (4π); rtol = 0.02)   # ∫ n dΩ = N over the sphere
+end
+
+# ---------------------------------------------------------------------------------------------
+# Multi-chain driver, distributed path: run over worker processes, check determinism, clean up.
+# ---------------------------------------------------------------------------------------------
+rungroup("distributed") && @testset "driver distributed (addprocs)" begin
+
+    addprocs(2; exeflags = "--project=$(Base.active_project())")
+    try
+        @everywhere using CFsOnSphere
+        @everywhere using LinearAlgebra
+        @everywhere LinearAlgebra.BLAS.set_num_threads(1)
+
+        function traces_for(seed)
+            dir = mktempdir()
+            sample_density_chains(dir, 10, 1, 2; n_chains = 2, seed = seed,
+                                  num_thermalization = 3_000, num_steps = 12_000,
+                                  record_every = 300, checkpoint_every = 6_000,
+                                  monitor_every = 1.0)
+            return [load(joinpath(dir, "chain_$(c).jld2"))["logpdf trace"] for c in 1:2]
+        end
+
+        a = traces_for(31415)
+        @test length(a[1]) == 40 && length(a[2]) == 40
+        b = traces_for(31415)
+        @test a[1] == b[1] && a[2] == b[2]       # deterministic given the seed
+        cc = traces_for(27182)
+        @test a[1] != cc[1]                        # a different seed gives a different chain
+    finally
+        rmprocs(workers())
+    end
+end
+
+# ---------------------------------------------------------------------------------------------
+# Multi-chain driver, resume: continue a chain from its checkpoint; step counts must add up.
+# ---------------------------------------------------------------------------------------------
+rungroup("resume") && @testset "driver resume from checkpoint" begin
+
+    dir = mktempdir()
+
+    # First leg: run to 15_000 steps and checkpoint (simulates being killed after a checkpoint).
+    sample_density_chains(dir, 10, 1, 2; n_chains = 2, seed = 161,
+                          num_thermalization = 3_000, num_steps = 15_000,
+                          record_every = 500, checkpoint_every = 15_000)
+    s1 = [load(joinpath(dir, "chain_$(c).jld2"))["number of steps"] for c in 1:2]
+    @test all(s1 .== 15_000)
+
+    # Resume to 40_000 total steps; thermalization is skipped, the remaining 25_000 steps run.
+    res = sample_density_chains(dir, 10, 1, 2; n_chains = 2, seed = 161,
+                                num_thermalization = 3_000, num_steps = 40_000,
+                                record_every = 500, checkpoint_every = 40_000, resume = true)
+    s2 = [load(joinpath(dir, "chain_$(c).jld2"))["number of steps"] for c in 1:2]
+    @test all(s2 .== 40_000)                     # 15_000 + 25_000 add up
+    @test all(isfinite, res["observables"]["density"])
+    @test isapprox(sum(res["observables"]["density"]) / 499, 10 / (4π); rtol = 0.02)
 end
