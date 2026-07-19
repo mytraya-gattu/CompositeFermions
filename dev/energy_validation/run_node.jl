@@ -73,6 +73,15 @@ function main()
         end
         resume = isdir(dir) && !isempty(filter(f -> startswith(f, "chain_"), readdir(dir)))
         t0 = time()
+        # Pre-warm the tempdir eigenstate cache on this node's master BEFORE the workers
+        # construct their Ψproj instances: calculate_j_y_eigenstates serializes its cache
+        # non-atomically, so 63 concurrent first-constructions could read a half-written file.
+        # One throwaway construction here leaves complete cache files for every worker.
+        let (Qstar, l_m_list) = cf_ground_state_lm(N, n, p)
+            Ψproj(Qstar, p, N, l_m_list)
+        end
+        println("[node $node_index] N=$N n=$n p=$p cache pre-warmed in $(round(time()-t0, digits=1)) s")
+        flush(stdout)
         summary = run_energy_system(dir, N, n, p;
                                     n_chains = n_chains,
                                     num_thermalization = num_thermalization,

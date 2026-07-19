@@ -15,7 +15,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=64
 #SBATCH --mem=64GB
-#SBATCH --time=04:00:00
+#SBATCH --time=02:00:00
 #SBATCH --job-name=cf_energy_val
 #SBATCH --output=/storage/home/mvg6042/scratch/cf_energy_validation/logs/%x_%a.out
 
@@ -29,7 +29,7 @@ FINAL_OUT=${CFVAL_FINAL:-/storage/home/mvg6042/work/cf_energy_validation}
 N_NODES=${CFVAL_NODES:?set CFVAL_NODES to the array size}
 N_CHAINS=${CFVAL_CHAINS:-63}
 THERM=${CFVAL_THERM:-500000}
-STEPS=${CFVAL_STEPS:-2000000}
+STEPS=${CFVAL_STEPS:-1600000}
 
 mkdir -p "$SCRATCH_OUT/logs" "$FINAL_OUT"
 
