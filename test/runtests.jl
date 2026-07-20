@@ -358,6 +358,29 @@ rungroup("diagnostics") && @testset "diagnostics: split-R̂ and ESS" begin
     @test isnan(effective_sample_size(fill(3.0, 100)))            # constant trace
     @test effective_sample_size([1.0]) == 1.0                     # too-short trace
     @test isnan(split_rhat([[1.0, 2.0], [1.0, 2.0]]))             # traces shorter than 4
+
+    # (d) Online integrated autocorrelation time τ_int (variance-ratio estimator). Convention:
+    # τ_int = 1/2 for uncorrelated samples (so ESS_steps = T·M / (2 τ_int)). The chains here use
+    # thinning 1, so the true steps-per-chain T equals the trace length.
+    let
+        r3 = Xoshiro(11)
+        iid = [randn(r3, 500) for _ in 1:256]
+        @test isapprox(integrated_autocorr_time(iid, 500), 0.5; atol = 0.1)
+
+        # AR(1) with φ = 0.9: analytic τ_int = (1+φ)/(2(1-φ)) = 9.5.
+        φ = 0.9; L = 4_000; r4 = Xoshiro(7)
+        ar = Vector{Vector{Float64}}()
+        for _ in 1:300
+            x = zeros(L)
+            for i in 2:L; x[i] = φ * x[i-1] + randn(r4); end
+            push!(ar, x)
+        end
+        @test isapprox(integrated_autocorr_time(ar, L), (1 + φ) / (2 * (1 - φ)); rtol = 0.2)
+
+        # Degenerate inputs return NaN, never throw.
+        @test isnan(integrated_autocorr_time([randn(100)], 100))              # single chain
+        @test isnan(integrated_autocorr_time([fill(2.0, 50), fill(2.0, 50)], 50))  # constant
+    end
 end
 
 # ---------------------------------------------------------------------------------------------
@@ -391,6 +414,16 @@ rungroup("serial") && @testset "driver serial (in-process)" begin
     @test isapprox(mean(d[bulk]), mean(ref["density"][bulk]); rtol = 0.03)
     @test isapprox(sum(d) / length(d), sum(ref["density"]) / length(ref["density"]); rtol = 0.02)
     @test isapprox(sum(d) / length(d), 10 / (4π); rtol = 0.02)   # ∫ n dΩ = N over the sphere
+
+    # Improvement 3: run_chains must return promptly once the chains finish and NOT quantize its
+    # wall time to `monitor_every`. Set `monitor_every` huge and check the tiny run still returns
+    # quickly (the serial in-process path never sleeps on it; this guards against regressions).
+    dir2 = mktempdir()
+    twall = @elapsed sample_density_chains(dir2, 10, 1, 2; n_chains = 2, seed = 99,
+                                           num_thermalization = 1_000, num_steps = 4_000,
+                                           record_every = 500, checkpoint_every = 4_000,
+                                           monitor_every = 1.0e6)
+    @test twall < 60.0
 end
 
 # ---------------------------------------------------------------------------------------------
@@ -446,4 +479,49 @@ rungroup("resume") && @testset "driver resume from checkpoint" begin
     @test all(s2 .== 40_000)                     # 15_000 + 25_000 add up
     @test all(isfinite, res["observables"]["density"])
     @test isapprox(sum(res["observables"]["density"]) / 499, 10 / (4π); rtol = 0.02)
+
+    # --- Bit-identical resume (improvement 2). An interrupted+resumed chain must reproduce an
+    # uninterrupted run with the same seed BIT-FOR-BIT (logpdf trace + positions). This works
+    # because the RNG state is checkpointed (schema >= 2) and the incrementally accumulated
+    # `jastrow_factor_log` is restored (a full rebuild alone drifts ~1e-13 from the incremental
+    # value; the rebuilt Slater matrix / caches are already bit-identical). ---
+    @testset "bit-identical resume" begin
+        K = 20_000
+        dfull = mktempdir()
+        sample_density_chains(dfull, 10, 1, 2; n_chains = 2, seed = 999,
+                              num_thermalization = 3_000, num_steps = K,
+                              record_every = 500, checkpoint_every = K)
+        dres = mktempdir()
+        sample_density_chains(dres, 10, 1, 2; n_chains = 2, seed = 999,
+                              num_thermalization = 3_000, num_steps = K ÷ 2,
+                              record_every = 500, checkpoint_every = K ÷ 2)
+        sample_density_chains(dres, 10, 1, 2; n_chains = 2, seed = 999,
+                              num_thermalization = 3_000, num_steps = K,
+                              record_every = 500, checkpoint_every = K, resume = true)
+        for c in 1:2
+            a = load(joinpath(dfull, "chain_$(c).jld2"))
+            b = load(joinpath(dres,  "chain_$(c).jld2"))
+            @test a["logpdf trace"] == b["logpdf trace"]   # bit-identical trace
+            @test a["theta vector"] == b["theta vector"]   # bit-identical positions
+            @test a["phi vector"]   == b["phi vector"]
+        end
+    end
+
+    # --- Old-schema fallback. A checkpoint predating RNG-state storage (schema < 2, no
+    # "rng state" key) must still resume — reseeded, with a printed note — rather than error. ---
+    @testset "old-schema resume fallback" begin
+        dold = mktempdir()
+        sample_density_chains(dold, 10, 1, 2; n_chains = 1, seed = 77,
+                              num_thermalization = 2_000, num_steps = 8_000,
+                              record_every = 500, checkpoint_every = 8_000)
+        p = joinpath(dold, "chain_1.jld2")
+        d = load(p)
+        delete!(d, "rng state"); delete!(d, "jastrow log")   # simulate a schema-1 checkpoint
+        d["schema version"] = 1
+        save(p, d)
+        sample_density_chains(dold, 10, 1, 2; n_chains = 1, seed = 77,
+                              num_thermalization = 2_000, num_steps = 16_000,
+                              record_every = 500, checkpoint_every = 16_000, resume = true)
+        @test load(p)["number of steps"] == 16_000        # 8_000 + 8_000 add up, no error
+    end
 end
