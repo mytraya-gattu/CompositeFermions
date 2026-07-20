@@ -193,3 +193,62 @@ function effective_sample_size(traces::Vector{Vector{Float64}})
     τ < 1.0 && (τ = 1.0)
     return (M * n) / τ
 end
+
+"""
+    integrated_autocorr_time(traces::Vector{Vector{Float64}}, steps_per_chain::Real) -> Float64
+
+Online integrated autocorrelation time `τ_int` of a scalar observable across `M` chains, from
+the variance ratio
+
+    τ_int = T · Varₘ(x̄ₘ) / (2 · Var_pool(x)),
+
+where `x̄ₘ` is the mean of chain `m`'s (thinned) trace, `Varₘ` is the sample variance across the
+`M` chain means, `Var_pool` is the variance of all pooled trace samples, and `T =
+steps_per_chain` is the number of **measurement steps per chain** — the true chain length in
+Monte-Carlo steps, **NOT** the thinned trace length. (The thinned sample variance is an unbiased
+estimate of the marginal variance and the thinned chain means estimate the true chain means, so
+the ratio must be scaled by the true `T`; the thinning interval then enters only through this
+`T`.)
+
+**Convention.** For uncorrelated samples this returns `τ_int = 1/2`, so the total effective
+sample size in steps is `ESS_steps = T·M / (2·τ_int)`. A strongly autocorrelated chain gives
+`τ_int ≫ 1/2`; an AR(1) process with lag-1 correlation `φ` has `τ_int = (1+φ)/(2(1−φ))`.
+
+Degenerate inputs return `NaN` rather than throwing: fewer than two chains (the variance across
+chain means is undefined) or a constant pooled sample (`Var_pool == 0`).
+"""
+function integrated_autocorr_time(traces::Vector{Vector{Float64}}, steps_per_chain::Real)
+
+    M::Int = length(traces)
+    M < 2 && return NaN
+
+    # Sample variance across the M chain means.
+    means = [sum(t) / length(t) for t in traces]
+    m̄ = sum(means) / M
+    var_means = 0.0
+    @inbounds for m in means
+        var_means += (m - m̄)^2
+    end
+    var_means /= (M - 1)
+
+    # Variance of all pooled samples (unbiased estimate of the marginal variance).
+    total::Int = 0
+    s = 0.0
+    for t in traces
+        total += length(t)
+        @inbounds for x in t
+            s += x
+        end
+    end
+    pooled_mean = s / total
+    var_pool = 0.0
+    for t in traces
+        @inbounds for x in t
+            var_pool += (x - pooled_mean)^2
+        end
+    end
+    var_pool /= (total - 1)
+    var_pool == 0.0 && return NaN
+
+    return steps_per_chain * var_means / (2.0 * var_pool)
+end

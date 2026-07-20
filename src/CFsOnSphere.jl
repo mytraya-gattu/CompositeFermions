@@ -59,7 +59,7 @@ export
     # Monte Carlo
     rand_θ_ϕ_gen, proposal, gibbs_thermalization!, update_density!, construct_det_ratios,
     # Convergence diagnostics
-    split_rhat, effective_sample_size,
+    split_rhat, effective_sample_size, integrated_autocorr_time,
     # Multi-chain distributed driver
     gibbs_sampling!, run_chains, monitor_chains, combine_chains, sample_density_chains,
     ChainStatusReport,
