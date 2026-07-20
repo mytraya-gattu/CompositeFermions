@@ -106,7 +106,7 @@ function gibbs_sampling!(RNG, Ψcurrent::T, Ψnext::T,
     return num_samples_accepted, trace, sampling_iter
 end
 
-const CHAIN_SCHEMA_VERSION = 1
+const CHAIN_SCHEMA_VERSION = 2
 
 """
     _merge_observables(prior, prior_steps, new, new_steps) -> Dict
@@ -187,7 +187,24 @@ function _run_one_chain(chain_id::Int, setup::Function, dir::String, seed,
         therm_accept = get(d, "thermalization acceptance rate", NaN)
         δt_therm = get(d, "thermalization duration", NaN)
         update_wavefunction!(Ψcurrent, θcurrent, ϕcurrent)
+        # `jastrow_factor_log` is accumulated incrementally during sampling and drifts from a
+        # full rebuild at the ~1e-13 level; restore the checkpointed value so the resumed logpdf
+        # (and hence the trace) is bit-identical to an uninterrupted run. The rebuilt
+        # `slater_det`/caches are already bit-identical to the incremental state.
+        if haskey(d, "jastrow log")
+            Ψcurrent.jastrow_factor_log = d["jastrow log"]
+        end
         copy!(Ψnext, Ψcurrent)
+        # Restore the RNG so the resumed stream is bit-faithful. Old checkpoints (schema < 2)
+        # predate RNG storage: fall back to the reseeded RNG (current behavior) with a note.
+        if haskey(d, "rng state")
+            RNG = d["rng state"]
+        else
+            println("[chain $(chain_id)] checkpoint predates RNG-state storage " *
+                    "(schema $(get(d, "schema version", 1)) < $(CHAIN_SCHEMA_VERSION)); " *
+                    "resuming with a reseeded RNG (results will not be bit-identical to an " *
+                    "uninterrupted run).")
+        end
     else
         update_wavefunction!(Ψcurrent, θcurrent, ϕcurrent)
         copy!(Ψnext, Ψcurrent)
@@ -224,6 +241,10 @@ function _run_one_chain(chain_id::Int, setup::Function, dir::String, seed,
             "record every"                  => record_every,
             "monte carlo duration"          => prior_duration + (time() - t0),
             "user observables"              => obs,
+            # For bit-faithful resume (schema >= 2): the RNG state and the incrementally
+            # accumulated Jastrow log at the checkpoint (see the resume branch above).
+            "rng state"                     => copy(RNG),
+            "jastrow log"                   => Ψcurrent.jastrow_factor_log,
         )
         save(path, data)
         return
@@ -327,12 +348,21 @@ function run_chains(setup::Function; n_chains::Int, dir::String, seed = 0,
         pool = CachingPool(workers())
         try
             task = @async pmap(run_one, pool, 1:n_chains)
+            # Event-driven completion: poll `istaskdone` at a fine granularity (≤ 1 s) so we
+            # return promptly once the chains finish, while still refreshing the monitor table
+            # only every `monitor_every` seconds. (The old `sleep(monitor_every)` loop quantized
+            # the total wall time to multiples of `monitor_every`.)
+            poll = min(1.0, Float64(monitor_every))
+            next_print = time() + Float64(monitor_every)
             while !istaskdone(task)
-                sleep(monitor_every)
-                try
-                    print(monitor_chains(dir))
-                catch
-                    # Checkpoints may be mid-write or not yet created; skip this tick.
+                timedwait(() -> istaskdone(task), poll; pollint = min(0.1, poll))
+                if !istaskdone(task) && time() >= next_print
+                    try
+                        print(monitor_chains(dir))
+                    catch
+                        # Checkpoints may be mid-write or not yet created; skip this tick.
+                    end
+                    next_print = time() + Float64(monitor_every)
                 end
             end
             fetch(task)   # rethrows any worker exception
@@ -348,9 +378,12 @@ end
     ChainStatusReport
 
 Snapshot of a multi-chain run read from the per-chain checkpoints in a directory: per-chain
-`(steps, acceptance, σ, mean logpdf)` plus the cross-chain split-R̂ and multi-chain ESS of the
-logpdf traces. `print`/`show` render a plain-text table readable in a Slurm log. Produced by
-[`monitor_chains`](@ref).
+`(steps, acceptance, σ, mean logpdf)` plus the cross-chain split-R̂, multi-chain ESS, and the
+online integrated autocorrelation time `τ_int` of the logpdf traces (see
+[`integrated_autocorr_time`](@ref); `1/2` for uncorrelated samples). `N` is the recovered system
+size (from a checkpoint's position vector, `-1` if unavailable), used to report `τ_int` in
+per-particle sweeps as well as steps. `print`/`show` render a plain-text table readable in a
+Slurm log. Produced by [`monitor_chains`](@ref).
 """
 struct ChainStatusReport
     dir::String
@@ -361,6 +394,8 @@ struct ChainStatusReport
     mean_logpdf::Vector{Float64}
     rhat::Float64
     ess::Float64
+    tau_int::Float64
+    N::Int
     n_read::Int
 end
 
@@ -378,6 +413,14 @@ function Base.show(io::IO, r::ChainStatusReport)
     end
     println(io, "  ", repeat("-", 64))
     @printf(io, "  split-R̂ (logpdf) = %.4f     multi-chain ESS = %.1f\n", r.rhat, r.ess)
+    # τ_int in the ESS_steps convention (1/2 = uncorrelated), reported in steps and, when the
+    # system size N is recoverable, also in per-particle sweeps (1 sweep = N steps).
+    if r.N > 0
+        @printf(io, "  τ_int (logpdf)   = %.2f steps  =  %.4f sweeps   (½ = uncorrelated)\n",
+                r.tau_int, r.tau_int / r.N)
+    else
+        @printf(io, "  τ_int (logpdf)   = %.2f steps   (½ = uncorrelated)\n", r.tau_int)
+    end
     return
 end
 
@@ -414,11 +457,13 @@ end
     monitor_chains(dir) -> ChainStatusReport
 
 Read all `chain_*.jld2` checkpoints in `dir` and report per-chain `(steps, acceptance, σ, mean
-logpdf)` together with the cross-chain **split-R̂** ([`split_rhat`](@ref)) and multi-chain
-**ESS** ([`effective_sample_size`](@ref)) of the recorded logpdf traces (trimmed to their common
-length). Works on a partially written run: files that are unreadable (e.g. mid-write) are skipped,
-and R̂/ESS are `NaN` until at least two chains with usable traces are present. The returned report
-`print`s as a plain-text table.
+logpdf)` together with the cross-chain **split-R̂** ([`split_rhat`](@ref)), the multi-chain
+**ESS** ([`effective_sample_size`](@ref)), and the online integrated autocorrelation time
+**`τ_int`** ([`integrated_autocorr_time`](@ref)) of the recorded logpdf traces (trimmed to their
+common length). Works on a partially written run: files that are unreadable (e.g. mid-write) are
+skipped, and R̂/ESS/τ_int are `NaN` until at least two chains with usable traces are present. The
+system size `N` is recovered from a checkpoint's stored position vector so `τ_int` can also be
+reported in per-particle sweeps. The returned report `print`s as a plain-text table.
 """
 function monitor_chains(dir::String)
     ds = _read_chain_checkpoints(dir)
@@ -429,28 +474,42 @@ function monitor_chains(dir::String)
     sigma = Float64[]
     mean_logpdf = Float64[]
     traces = Vector{Float64}[]
+    trace_steps = Int[]        # measurement steps of the chains that contributed a trace
+    N = -1                     # recovered system size (from a position vector), -1 if unknown
 
     for d in ds
         push!(chain_ids, get(d, "chain id", -1))
-        push!(steps, get(d, "number of steps", 0))
+        st = get(d, "number of steps", 0)
+        push!(steps, st)
         push!(acceptance, get(d, "acceptance rate", NaN))
         push!(sigma, get(d, "step size", NaN))
         tr = get(d, "logpdf trace", Float64[])
         push!(mean_logpdf, isempty(tr) ? NaN : sum(tr) / length(tr))
-        isempty(tr) || push!(traces, Float64.(tr))
+        if !isempty(tr)
+            push!(traces, Float64.(tr))
+            push!(trace_steps, st)
+        end
+        if N < 0
+            θv = get(d, "theta vector", nothing)
+            θv === nothing || (N = length(θv))
+        end
     end
 
     rhat = NaN
     ess = NaN
+    tau_int = NaN
     if length(traces) >= 1
         L = minimum(length, traces)
         trimmed = [t[1:L] for t in traces]
         rhat = split_rhat(trimmed)
         ess = effective_sample_size(trimmed)
+        # T = measurement steps per chain (true chain length, NOT the thinned trace length).
+        T = isempty(trace_steps) ? 0.0 : sum(trace_steps) / length(trace_steps)
+        tau_int = integrated_autocorr_time(trimmed, T)
     end
 
     return ChainStatusReport(dir, chain_ids, steps, acceptance, sigma, mean_logpdf,
-                             rhat, ess, length(ds))
+                             rhat, ess, tau_int, N, length(ds))
 end
 
 """
@@ -465,8 +524,9 @@ Pool the per-chain checkpoints in `dir` into combined observables and diagnostic
 - `"per_chain"` — the per-chain observable values, so you can inspect chain-to-chain scatter.
 - `"standard_error"` — for **scalar** observables, the cross-chain standard error
   `std(per-chain means)/√(n_chains)`.
-- `"n_chains"`, `"total_steps"`, and `"diagnostics"` — a `(rhat, ess)` NamedTuple from the
-  logpdf traces (as in [`monitor_chains`](@ref)).
+- `"n_chains"`, `"total_steps"`, and `"diagnostics"` — a `(rhat, ess, tau_int)` NamedTuple from
+  the logpdf traces (as in [`monitor_chains`](@ref); `tau_int` is the online integrated
+  autocorrelation time, `1/2` for uncorrelated samples).
 """
 function combine_chains(dir::String)
     ds = _read_chain_checkpoints(dir)
@@ -509,7 +569,7 @@ function combine_chains(dir::String)
         "standard_error" => standard_error,
         "n_chains"       => n_chains,
         "total_steps"    => total_steps,
-        "diagnostics"    => (rhat = rep.rhat, ess = rep.ess),
+        "diagnostics"    => (rhat = rep.rhat, ess = rep.ess, tau_int = rep.tau_int),
     )
 end
 
