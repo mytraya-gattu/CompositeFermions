@@ -17,6 +17,7 @@
 #SBATCH --mem=64GB
 #SBATCH --time=02:00:00
 #SBATCH --job-name=cf_energy_val
+#SBATCH --requeue
 #SBATCH --output=/storage/home/mvg6042/scratch/cf_energy_validation/logs/%x_%a.out
 
 set -u
