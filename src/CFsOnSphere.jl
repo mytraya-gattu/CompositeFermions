@@ -51,7 +51,7 @@ export
     Ψproj, Ψparton, Ψunproj, ΨoneLL,
     update_wavefunction!,
     # Orbitals / projection / polynomials
-    calculate_ll, get_symmetric_polynomials!,
+    calculate_ll, get_symmetric_polynomials!, jk_reg_coeffs, u_v_generator,
     # Slater inverse (Ψunproj) + quasihole/quasiparticle helper
     initialize_inverse!, slater_det_ratio, update_inverse!, build_extended_slater!,
     # Λ-level convenience builders

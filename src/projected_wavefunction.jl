@@ -10,20 +10,27 @@
 Mutable state of a Jain-Kamilla projected composite-fermion wavefunction (electrons + `p`
 attached flux), at filling controlled by `Qstar`, `l_m_list`.
 
-The JK projection binds a single vortex pair into each orbital (`Q₁ = (N-1)/2`, ESP roots
-with multiplicity one). Higher Jastrow powers `ν = n/(2pn+1)` come from the global Jastrow
-factor `∏(uᵢvⱼ-uⱼvᵢ)^p`: e.g. `Ψ_{n/(2pn+1)} = Φ₁^{2(p̃-1)} P_LLL[Φₙ Φ₁²]` is obtained with
-`p = 2 p̃`.
+The projection binds `jk_multiplicity = q` vortex pairs into each orbital
+(`Q₁ = q(N-1)/2`, ESP roots with multiplicity `q`), so the Slater element is
+`[P_LLL Y_{Q*,L,M} Jᵢ^q] / Jᵢ^q` and the whole wavefunction is `J^p · det[…]`.
+
+- `q = 1` (default) is the standard Jain-Kamilla ansatz: the remaining vortices come from the
+  global Jastrow factor, e.g. `Ψ_{n/(2pn+1)} = Φ₁^{2(p̃-1)} P_LLL[Φₙ Φ₁²]` with `p = 2p̃`.
+- `q = p` binds every vortex into the projected orbital. At `ν = 1/m` (`p = m-1`) this is the
+  **exact** LLL projection, not an ansatz, whenever exactly one composite fermion sits outside
+  the lowest Λ level — the whole `Ωᵢ`-dependence of `J^p` is then `Jᵢ^p`, and `P_LLL` acts on
+  all of it.
 
 # Key fields
 - `Qstar::Rational{Int64}`: effective monopole strength `Q*`.
 - `p::Int64`: power of the global Jastrow factor `∏(uᵢvⱼ-uⱼvᵢ)^p`.
 - `system_size::Int64`: number of electrons `N`.
+- `jk_multiplicity::Int64`: vortex pairs `q` bound into each projected orbital.
 - `l_m_list`: occupied `(L, Lz)` orbitals.
 - `slater_det::Matrix{ComplexF64}`: the projected Slater matrix.
 - `jastrow_factor_log::ComplexF64`: log of the global Jastrow factor.
-- `reg_coeffs::Vector{Float64}`: ESP normalization, `reg_coeffs[i] = i/((N-1)-i+1)` so
-  `∏ = 1/C(N-1, k)`.
+- `reg_coeffs::Vector{Float64}`: ESP normalization, `reg_coeffs[i] = i/(q(N-1)-i+1)` so
+  `∏ = 1/C(q(N-1), k)`.
 
 The remaining fields (`U`, `V`, `exp_θ`, `exp_ϕ`, `dist_matrix`, `u_v_ratio_matrix`,
 `elementary_symmetric_polynomials`, `wigner_d_matrices`, `wigner_D_matrices`,
@@ -34,6 +41,7 @@ mutable struct Ψproj
     Qstar::Rational{Int64}
     p::Int64
     system_size::Int64
+    jk_multiplicity::Int64
 
     l_m_list::Vector{NTuple{2,Rational{Int64}}}
     Lmax::Rational{Int64}
@@ -108,15 +116,22 @@ mutable struct Ψparton
 end
 
 """
-    Ψproj(Qstar, p, system_size, l_m_list)
+    Ψproj(Qstar, p, system_size, l_m_list; jk_multiplicity = 1)
 
-Construct a Jain-Kamilla projected CF wavefunction. `Qstar = Q - p(N-1)/2` is the effective
-monopole strength, `p` the global Jastrow power, `l_m_list` the occupied `(L, Lz)` orbitals.
-The JK projection binds a single vortex pair into each orbital (`Q₁ = (N-1)/2`).
+Construct a projected CF wavefunction. `Qstar = Q - p(N-1)/2` is the effective monopole
+strength, `p` the global Jastrow power, `l_m_list` the occupied `(L, Lz)` orbitals.
+
+`jk_multiplicity = q` is the number of vortex pairs bound into each projected orbital
+(`Q₁ = q(N-1)/2`). `q = 1` is the standard Jain-Kamilla ansatz; `q = p` at `ν = 1/m` is the
+exact LLL projection when exactly one CF sits outside the lowest Λ level. See the `Ψproj`
+docstring.
 """
-function Ψproj(Qstar::Rational{Int64}, p::Int64, system_size::Int64, l_m_list::Vector{NTuple{2,Rational{Int64}}})
+function Ψproj(Qstar::Rational{Int64}, p::Int64, system_size::Int64, l_m_list::Vector{NTuple{2,Rational{Int64}}}; jk_multiplicity::Int64 = 1)
 
     Lmax = maximum(first, l_m_list)
+
+    @assert jk_multiplicity ≥ 1 "jk_multiplicity must be a positive integer."
+    @assert Lmax - Qstar ≤ jk_multiplicity * (system_size - 1) "Largest Λ-level index Lmax-Q* = $(Lmax - Qstar) exceeds q(N-1) = $(jk_multiplicity * (system_size - 1)); that orbital projects to zero."
 
     fourier_matrix = zeros(ComplexF64, length(l_m_list), numerator(1 + Lmax-Qstar), numerator(1+2*Lmax))
 
@@ -125,7 +140,7 @@ function Ψproj(Qstar::Rational{Int64}, p::Int64, system_size::Int64, l_m_list::
 
     for (Liter, L) in enumerate(Lgrid)
 
-        fourier_matrix[liters[Liter], begin:begin+numerator(L-Qstar), numerator(1-L+Lmax):1:numerator(1+L+Lmax)] .= generate_fourier_matrices(Qstar, system_size, L, last.(l_m_list[liters[Liter]]))
+        fourier_matrix[liters[Liter], begin:begin+numerator(L-Qstar), numerator(1-L+Lmax):1:numerator(1+L+Lmax)] .= generate_fourier_matrices(Qstar, system_size, L, last.(l_m_list[liters[Liter]]), jk_multiplicity)
 
     end
 
@@ -152,9 +167,9 @@ function Ψproj(Qstar::Rational{Int64}, p::Int64, system_size::Int64, l_m_list::
     wigner_d_matrices = zeros(ComplexF64, length(l_m_list) * (1 + numerator(Lmax - Qstar)), system_size)
     wigner_D_matrices = zeros(ComplexF64, length(l_m_list), 1 + numerator(Lmax - Qstar), system_size)
 
-    reg_coeffs = jk_reg_coeffs(system_size, numerator(Lmax - Qstar))
+    reg_coeffs = jk_reg_coeffs(system_size, numerator(Lmax - Qstar), jk_multiplicity)
 
-    return Ψproj(Qstar, p, system_size, l_m_list, Lmax, μ_list, Lz_list, fourier_tot_matrix, U, V, exp_θ, exp_ϕ, dist_matrix, u_v_ratio_matrix, elementary_symmetric_polynomials, reg_coeffs, wigner_d_matrices, wigner_D_matrices, jastrow_factor_log, slater_det)
+    return Ψproj(Qstar, p, system_size, jk_multiplicity, l_m_list, Lmax, μ_list, Lz_list, fourier_tot_matrix, U, V, exp_θ, exp_ϕ, dist_matrix, u_v_ratio_matrix, elementary_symmetric_polynomials, reg_coeffs, wigner_d_matrices, wigner_D_matrices, jastrow_factor_log, slater_det)
 end
 
 """
@@ -235,6 +250,11 @@ end
 
 _esp_order(Ψ::Ψproj) = numerator(Ψ.Lmax - Ψ.Qstar)
 _esp_order(Ψ::Ψparton) = Ψ.max_JK
+
+# --- Jastrow multiplicity bound into each projected orbital (Ψparton is always JK, q = 1) ---
+
+_jk_multiplicity(Ψ::Ψproj) = Ψ.jk_multiplicity
+_jk_multiplicity(Ψ::Ψparton) = 1
 
 # --- Pairwise spinor data (U, V, jastrow, ratios, distances), shared by Ψproj/Ψparton ---
 
@@ -319,8 +339,9 @@ function update_wavefunction!(Ψ::Union{Ψproj,Ψparton}, θ::Vector{Float64}, �
     _update_pairs!(Ψ, θ, ϕ)
 
     b = _esp_order(Ψ)
+    q = _jk_multiplicity(Ψ)
     for electron_iter in axes(Ψ.elementary_symmetric_polynomials, 2)
-        @inbounds @views get_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, electron_iter], Ψ.u_v_ratio_matrix[:, electron_iter], b, Ψ.reg_coeffs)
+        @inbounds @views get_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, electron_iter], Ψ.u_v_ratio_matrix[:, electron_iter], b, Ψ.reg_coeffs, q)
     end
 
     mul!(Ψ.wigner_d_matrices, Ψ.fourier_tot_matrix, Ψ.exp_θ)
@@ -349,8 +370,9 @@ function update_wavefunction!(Ψ::Union{Ψproj,Ψparton}, θ::Float64, ϕ::Float
     _update_pairs!(Ψ, θ, ϕ, iter)
 
     b = _esp_order(Ψ)
+    q = _jk_multiplicity(Ψ)
     for electron_iter in axes(Ψ.elementary_symmetric_polynomials, 2)
-        @inbounds @views get_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, electron_iter], Ψ.u_v_ratio_matrix[:, electron_iter], b, Ψ.reg_coeffs)
+        @inbounds @views get_symmetric_polynomials!(Ψ.elementary_symmetric_polynomials[:, electron_iter], Ψ.u_v_ratio_matrix[:, electron_iter], b, Ψ.reg_coeffs, q)
     end
 
     @views mul!(Ψ.wigner_d_matrices[:, iter], Ψ.fourier_tot_matrix, Ψ.exp_θ[:, iter])

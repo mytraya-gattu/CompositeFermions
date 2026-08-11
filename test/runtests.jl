@@ -207,6 +207,93 @@ rungroup("core") && @testset "CFsOnSphere.jl" begin
         @test all(dest[M+2:end] .== 0)
     end
 
+    @testset "ESP with root multiplicity q" begin
+        # The q-multiplicity method must equal the q=1 method applied to the repeated multiset,
+        # and reg_coeffs must give the running product 1/C(q(N-1), k).
+        maxerr = 0.0
+        for M in (2, 3, 5), q in (1, 2, 3)
+            rng = MersenneTwister(31M + q)
+            roots = [complex(randn(rng), randn(rng)) for _ in 1:M]
+            Np = M + 1                      # so that M = N-1 distinct roots
+            for bb in 0:min(q * M, 6)
+                reg = jk_reg_coeffs(Np, max(bb, 1), q)
+                a = zeros(ComplexF64, bb + 1)
+                b = zeros(ComplexF64, bb + 1)
+                get_symmetric_polynomials!(a, roots, bb, reg, q)
+                get_symmetric_polynomials!(b, repeat(roots, q), bb, reg)
+                maxerr = max(maxerr, maximum(abs.(a .- b)) / max(maximum(abs, b), 1e-300))
+            end
+            # running product of reg_coeffs is 1/C(q*(Np-1), k)
+            reg = jk_reg_coeffs(Np, q * M, q)
+            acc = 1.0
+            for k in 1:(q*M)
+                acc *= reg[k]
+                @test acc ≈ 1 / binomial(q * M, k) rtol = 1e-12
+            end
+        end
+        @test maxerr < 1e-12
+        # q = 1 reproduces the two-argument reg_coeffs exactly
+        @test jk_reg_coeffs(10, 5, 1) == jk_reg_coeffs(10, 5)
+    end
+
+    @testset "exact projection at ν=1/m via q = m-1" begin
+        # At ν = 1/m the direct (exact) LLL projection of a single CF exciton is the JK form
+        # with Jᵢ^{m-1} bound into the orbital, i.e. q = m-1. Check against an independent
+        # closed-form evaluation of that wavefunction (elementary symmetric polynomials of the
+        # multiset {u_j/(u_a v_j - u_j v_a)} with multiplicity m-1), which shares no code with
+        # the package. The two may differ only by a configuration-independent constant.
+        m = 3; q = m - 1; p = m - 1
+        espref(vals, nmax) = begin
+            e = zeros(ComplexF64, nmax + 1); e[1] = 1.0 + 0im
+            for x in vals, k in min(nmax, nmax):-1:1
+                e[k+1] += x * e[k]
+            end
+            e
+        end
+        function psiref(u, v, nΛ)
+            Np = length(u); Qs = (Np - 1) // 2
+            A = zeros(ComplexF64, Np, Np)
+            for a in 1:Np
+                d = [u[a] * v[j] - u[j] * v[a] for j in 1:Np if j != a]
+                Jap = prod(d)^((m - 1) ÷ 2)
+                e = espref(repeat([u[j] for j in 1:Np if j != a] ./ d, q), nΛ)
+                for j in 1:Np-1
+                    A[a, j] = u[a]^j * v[a]^(Np - 1 - j)
+                end
+                A[a, Np] = u[a]^numerator(2Qs + nΛ) * e[nΛ+1]
+                A[a, :] .*= Jap
+            end
+            det(A)
+        end
+        for (Np, nΛ) in ((5, 1), (5, 2), (6, 1), (6, 3), (7, 2))
+            Qs = (Np - 1) // 2
+            l_m_list = NTuple{2,Rational{Int64}}[(Qs, mh) for mh in (-Qs+1):1:Qs]
+            push!(l_m_list, (Qs + nΛ, Qs + nΛ))
+            ψ = Ψproj(Qs, p, Np, l_m_list; jk_multiplicity = q)
+            rng = MersenneTwister(900 + 10Np + nΛ)
+            ratios = ComplexF64[]
+            for _ in 1:4
+                θ, ϕ = rand_θ_ϕ_gen(rng, Np)
+                update_wavefunction!(ψ, θ, ϕ)
+                u, v = u_v_generator(θ, ϕ)
+                push!(ratios, exp(ψ.jastrow_factor_log) * det(ψ.slater_det) / psiref(u, v, nΛ))
+            end
+            @test maximum(abs.(ratios .- ratios[1])) / abs(ratios[1]) < 1e-9
+        end
+    end
+
+    @testset "Λ-level bound q(N-1)" begin
+        # The projected orbital vanishes identically once the Λ-level index exceeds q(N-1);
+        # the constructor must reject it rather than silently returning zero.
+        Np = 5; m = 3; q = m - 1; Qs = (Np - 1) // 2
+        ok = NTuple{2,Rational{Int64}}[(Qs, mh) for mh in (-Qs+1):1:Qs]
+        push!(ok, (Qs + q * (Np - 1), Qs + q * (Np - 1)))
+        @test Ψproj(Qs, m - 1, Np, ok; jk_multiplicity = q) isa Ψproj
+        bad = NTuple{2,Rational{Int64}}[(Qs, mh) for mh in (-Qs+1):1:Qs]
+        push!(bad, (Qs + q * (Np - 1) + 1, Qs + q * (Np - 1) + 1))
+        @test_throws AssertionError Ψproj(Qs, m - 1, Np, bad; jk_multiplicity = q)
+    end
+
     @testset "proposal convention + isotropy" begin
         rng = MersenneTwister(2)
         θ0, ϕ0, σ = 0.9, 0.3, 0.3
