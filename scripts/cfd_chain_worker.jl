@@ -71,6 +71,8 @@ orbital_file  = req(args, "orbital-file")
 configs_file  = req(args, "configs-file")
 disorder_file = get(args, "disorder-file", "")
 stream_file   = get(args, "stream-file", "")
+guide_mode    = get(args, "guide", "single")    # single | mixture (p ∝ Σ_k |Ψ_k|²)
+guide_mode in ("single", "mixture") || error("--guide must be single or mixture")
 
 Qstar = twoQ // 2 - p * (N - 1)
 
@@ -136,6 +138,13 @@ logpdf(ψ::ΨprojDFT) = 2.0 * real(logdet(ψ.slater_det) + ψ.jastrow_factor_log
 
 acc = CFDAccumulator(cfg, Ψcurrent.dim_basis, N)
 
+# mixture guide: log p = logpdf(Ψ_g) + log Σ_k |r_k|²; work buffers for the proposed state
+FR = guide_mode == "mixture" ? FastRatios(cfg) : nothing
+accN = CFDAccumulator(cfg, Ψcurrent.dim_basis, N)
+logpdf_mix(ψ::ΨprojDFT) = logpdf(ψ) + mixture_ratios!(accN, FR, ψ, C_all)
+logpdf_used = guide_mode == "mixture" ? logpdf_mix : logpdf
+r_cur = zeros(ComplexF64, K)
+
 # ---------------------------------------------------------------- positions & thermalization
 
 θcurrent, ϕcurrent = rand_θ_ϕ_gen(RNG, N)
@@ -145,13 +154,14 @@ acc = CFDAccumulator(cfg, Ψcurrent.dim_basis, N)
 
 println("thermalizing ($ntherm steps) ...")
 sampling_iter, σ, δt_therm, acc_therm = gibbs_thermalization!(
-    RNG, Ψcurrent, Ψnext, θcurrent, ϕcurrent, θnext, ϕnext, σ, logpdf, ntherm;
+    RNG, Ψcurrent, Ψnext, θcurrent, ϕcurrent, θnext, ϕnext, σ, logpdf_used, ntherm;
     log_weight = log_weight)
 println("  acceptance rate: $(round(acc_therm, digits=3))  step size: $(round(σ, digits=4))  time: $(round(δt_therm, digits=1))s")
 
 # ---------------------------------------------------------------- production
 
-logpdf_current = logpdf(Ψcurrent)
+logpdf_current = logpdf_used(Ψcurrent)
+guide_mode == "mixture" && (r_cur .= accN.r)
 wcache = log_weight === nothing ? zeros(N) : [log_weight(θcurrent[i], ϕcurrent[i]) for i in 1:N]
 num_accepted   = 0
 t0 = time()
@@ -161,7 +171,7 @@ for mc_iter in 1:nsteps
 
     θnext[sampling_iter], ϕnext[sampling_iter] = proposal(RNG, θcurrent[sampling_iter], ϕcurrent[sampling_iter], σ)
     update_wavefunction!(Ψnext, θnext[sampling_iter], ϕnext[sampling_iter], sampling_iter)
-    logpdf_next = logpdf(Ψnext)
+    logpdf_next = logpdf_used(Ψnext)
     wnew = log_weight === nothing ? 0.0 : log_weight(θnext[sampling_iter], ϕnext[sampling_iter])
 
     if (logpdf_next - logpdf_current) + (wnew - wcache[sampling_iter]) >= log(rand(RNG))
@@ -170,6 +180,7 @@ for mc_iter in 1:nsteps
         copy!(Ψcurrent, Ψnext, sampling_iter)
         logpdf_current = logpdf_next
         wcache[sampling_iter] = wnew
+        guide_mode == "mixture" && (r_cur .= accN.r)
         num_accepted  += 1
     else
         θnext[sampling_iter] = θcurrent[sampling_iter]
@@ -179,7 +190,12 @@ for mc_iter in 1:nsteps
 
     if mod(mc_iter, stride) == 0
         V_loc = coulomb_local_energy(Ψcurrent, twoQ) + field_local_energy(fe, θcurrent, ϕcurrent)
-        accumulate_cfd!(acc, Ψcurrent, C_all, V_loc)
+        if guide_mode == "mixture"
+            acc.r .= r_cur
+            accumulate_cfd_mixture!(acc, V_loc)
+        else
+            accumulate_cfd!(acc, Ψcurrent, C_all, V_loc)
+        end
     end
 
     sampling_iter = mod(sampling_iter, N) + 1
@@ -216,6 +232,7 @@ JLD2.jldsave(outfile;
     disorder_V_lm = dis_V_lm,
     disorder_metadata = dis_meta,
     stream_file = stream_file,
+    guide_mode = guide_mode,
     stream_metadata = stream_meta,
     orbital_file = orbital_file,
     acceptance_rate = num_accepted / nsteps,

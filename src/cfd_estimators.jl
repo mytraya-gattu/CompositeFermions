@@ -20,7 +20,7 @@ module CFDEstimators
 # sampled against |Ψ_guide|². Kinetic energy is exactly quenched in the LLL
 # (constant), so V_loc = chord Coulomb + external (disorder) potential only.
 
-export CFDConfigs, CFDAccumulator, accumulate_cfd!,
+export CFDConfigs, CFDAccumulator, accumulate_cfd!, FastRatios, fast_ratios!, mixture_ratios!, accumulate_cfd_mixture!,
     coulomb_local_energy, HarmonicFieldEvaluator, field_local_energy
 
 using LinearAlgebra
@@ -125,6 +125,83 @@ function accumulate_cfd!(acc::CFDAccumulator, Ψ::ΨprojDFT, C_all::Matrix{Compl
 
     @inbounds for j in 1:K
         rj = acc.r[j]
+        for i in 1:K
+            z = conj(acc.r[i]) * rj
+            acc.S[i, j] += z
+            acc.W[i, j] += V_loc * z
+        end
+    end
+    acc.n_samples += 1
+    return acc
+end
+
+
+# -------------------------------------------------------------------
+# Mixture guide: sample p ∝ |Ψ_g|² Σ_k |r_k|² = Σ_k |Ψ_k|² (all K configurations covered, so the
+# estimators conj(r_c) r_c' / Σ|r|² are bounded and have finite variance). Ratios r_k for
+# configurations that are low-order excitations of the guide are minors of A = Φ Φ_g⁻¹ (all rows of
+# A for guide orbitals are unit rows), with a configuration-only sign fixed once at construction.
+# -------------------------------------------------------------------
+
+struct FastRatios
+    P::Vector{Vector{Int}}      # particle orbitals (rows of Φ) not in the guide
+    H::Vector{Vector{Int}}      # positions (1..N) in the guide of the removed orbitals
+    sgn::Vector{Float64}
+end
+
+function FastRatios(cfg::CFDConfigs)
+    g = cfg.configs[cfg.guide]; N = length(g)
+    P = Vector{Vector{Int}}(); H = Vector{Vector{Int}}(); sgn = Float64[]
+    rng_A = randn(ComplexF64, cfg.norb, N)
+    for i in 1:N; rng_A[g[i], :] .= 0; rng_A[g[i], i] = 1; end
+    for c in cfg.configs
+        p = sort(setdiff(c, g)); h = sort([findfirst(==(x), g) for x in setdiff(g, c)])
+        full = det(rng_A[c, :]); small = isempty(p) ? one(ComplexF64) : det(rng_A[p, h])
+        s = full / small
+        abs(abs(s) - 1) < 1e-8 && abs(imag(s)) < 1e-8 || error("sign calibration failed for configuration $c")
+        push!(P, p); push!(H, h); push!(sgn, real(s))
+    end
+    return FastRatios(P, H, sgn)
+end
+
+"r_k = det(Φ[c_k,:]) / det(Φ[g,:]) from A = Φ Φ_g⁻¹."
+function fast_ratios!(r::Vector{ComplexF64}, FR::FastRatios, A::AbstractMatrix{ComplexF64})
+    @inbounds for k in eachindex(FR.P)
+        p = FR.P[k]; h = FR.H[k]; m = length(p)
+        r[k] = if m == 0
+            one(ComplexF64)
+        elseif m == 1
+            FR.sgn[k] * A[p[1], h[1]]
+        elseif m == 2
+            FR.sgn[k] * (A[p[1], h[1]] * A[p[2], h[2]] - A[p[1], h[2]] * A[p[2], h[1]])
+        else
+            FR.sgn[k] * det(A[p, h])
+        end
+    end
+    return r
+end
+
+"Φ = C_all' raw (norb × N), A = Φ Φ_g⁻¹, ratios; returns log Σ_k |r_k|². Workspaces in acc."
+function mixture_ratios!(acc::CFDAccumulator, FR::FastRatios, Ψ::ΨprojDFT, C_all::Matrix{ComplexF64})
+    mul!(acc.Φ, C_all', Ψ.raw_slater_det)
+    g = acc.cfg.configs[acc.cfg.guide]
+    F = lu(acc.Φ[g, :]; check = false)
+    A = acc.Φ / F
+    fast_ratios!(acc.r, FR, A)
+    return log(sum(abs2, acc.r))
+end
+
+"Accumulate with the mixture-guide weights (acc.r must hold the current ratios)."
+function accumulate_cfd_mixture!(acc::CFDAccumulator, V_loc::Float64)
+    K = length(acc.r)
+    m = sum(abs2, acc.r)
+    @inbounds for k in 1:K
+        w = abs2(acc.r[k]) / m
+        acc.sum_r2[k] += w
+        acc.sum_r4[k] += w * w
+    end
+    @inbounds for j in 1:K
+        rj = acc.r[j] / m
         for i in 1:K
             z = conj(acc.r[i]) * rj
             acc.S[i, j] += z

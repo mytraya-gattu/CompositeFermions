@@ -32,7 +32,7 @@ export Ψproj, ΨoneLL, Ψparton, update_wavefunction!, gibbs_thermalization!,
     update_density!, construct_det_ratios,
     HarmonicAccumulator, accumulate_density!, finalize_n_lm,
     ΨprojDFT, load_dft_orbitals, ks_to_mc_coefficients,
-    CFDConfigs, CFDAccumulator, accumulate_cfd!,
+    CFDConfigs, CFDAccumulator, accumulate_cfd!, FastRatios, fast_ratios!, mixture_ratios!, accumulate_cfd_mixture!,
     coulomb_local_energy, HarmonicFieldEvaluator, field_local_energy,
     RealHarmonicField, field_value
 
