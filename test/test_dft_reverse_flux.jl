@@ -24,7 +24,8 @@ function compare(label, Qstar, P, N, nfill)
     end
     # fresh full update at the final positions (checks the incremental path did not drift)
     dft2 = ΨprojDFT(Qstar, P, N, nfill - 1, Matrix{ComplexF64}(I, N, N)); update_wavefunction!(dft2, θ, ϕ)
-    drift = abs(val(dft2) - val(dft))
+    d = val(dft2) - val(dft)          # complex logs agree up to 2πi multiples (principal-value phase increments)
+    drift = abs(real(d)) + abs(angle(cis(imag(d))))
     ok = maximum(errs) < 1e-8 && drift < 1e-8
     global fails += !ok
     @printf("%-40s %s  max|Δ log|Ψ|| = %.1e over 21 configs, incremental drift %.1e, jk_order %d\n",
