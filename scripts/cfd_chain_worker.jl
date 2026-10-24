@@ -75,6 +75,9 @@ stream_file   = get(args, "stream-file", "")
 Qstar = twoQ // 2 - p * (N - 1)
 
 RNG = Random.MersenneTwister(chain)
+# gibbs_thermalization! draws its acceptance tests from the global RNG: seed it too, so a
+# chain is reproducible from --chain alone.
+Random.seed!(1_000_003 * chain)
 
 # ---------------------------------------------------------------- orbitals & configs
 
