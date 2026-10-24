@@ -14,13 +14,17 @@ function compare(label, Qstar, P, N, nfill)
     update_wavefunction!(ref, θ, ϕ); update_wavefunction!(dft, θ, ϕ)
     val(ψ) = logdet(ψ.slater_det) + ψ.jastrow_factor_log
     errs = [abs(real(val(ref) - val(dft)))]
-    phase0 = imag(val(ref) - val(dft))
+    inc_gap = Float64[]
     for k in 1:20
         i = mod1(k, N)
         θi, ϕi = proposal(rng, θ[i], ϕ[i], 0.5)
         θ[i], ϕ[i] = θi, ϕi
         update_wavefunction!(ref, θi, ϕi, i); update_wavefunction!(dft, θi, ϕi, i)
-        push!(errs, abs(real(val(ref) - val(dft))))
+        # reference: a FRESH full Ψproj update (Ψproj's own incremental path deflates roots and
+        # is unstable at high JK order; its gap is reported separately below)
+        reff = Ψproj(Qstar, P, N, lm); update_wavefunction!(reff, θ, ϕ)
+        push!(errs, abs(real(val(reff) - val(dft))))
+        push!(inc_gap, abs(real(val(ref) - val(dft))))
     end
     # fresh full update at the final positions (checks the incremental path did not drift)
     dft2 = ΨprojDFT(Qstar, P, N, nfill - 1, Matrix{ComplexF64}(I, N, N)); update_wavefunction!(dft2, θ, ϕ)
@@ -35,8 +39,8 @@ function compare(label, Qstar, P, N, nfill)
     @printf("    rotation invariance of log|Ψ| (full updates): %.1e\n", rot)
     ok = maximum(errs) < 1e-8 && drift < 1e-8 && rot < 1e-8
     global fails += !ok
-    @printf("%-40s %s  max|Δ log|Ψ|| = %.1e over 21 configs, incremental drift %.1e, jk_order %d\n",
-            label, ok ? "PASS" : "FAIL", maximum(errs), drift, dft.jk_order)
+    @printf("%-40s %s  max|Δ log|Ψ|| vs fresh Ψproj = %.1e over 21 configs, ΨprojDFT move-path drift %.1e, jk_order %d  [Ψproj incremental path differs by up to %.1e]\n",
+            label, ok ? "PASS" : "FAIL", maximum(errs), drift, dft.jk_order, maximum(inc_gap))
 end
 compare("forward  nu=1/3 N=6 Q*=5/2", 5 // 2, 2, 6, 1)
 compare("forward  nu=2/5 N=8 Q*=1",   1 // 1, 2, 8, 2)
