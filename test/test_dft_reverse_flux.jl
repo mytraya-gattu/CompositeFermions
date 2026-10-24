@@ -26,7 +26,14 @@ function compare(label, Qstar, P, N, nfill)
     dft2 = ΨprojDFT(Qstar, P, N, nfill - 1, Matrix{ComplexF64}(I, N, N)); update_wavefunction!(dft2, θ, ϕ)
     d = val(dft2) - val(dft)          # complex logs agree up to 2πi multiples (principal-value phase increments)
     drift = abs(real(d)) + abs(angle(cis(imag(d))))
-    ok = maximum(errs) < 1e-8 && drift < 1e-8
+    # rotational invariance of |Ψ| (filled Lambda levels are L = 0): fresh full updates at X and RX
+    Rm = Matrix(qr(randn(rng, 3, 3)).Q)
+    xyz = [Rm * [sin(θ[i])cos(ϕ[i]), sin(θ[i])sin(ϕ[i]), cos(θ[i])] for i in 1:N]
+    θr = [acos(clamp(x[3], -1, 1)) for x in xyz]; ϕr = [atan(x[2], x[1]) for x in xyz]
+    dft3 = ΨprojDFT(Qstar, P, N, nfill - 1, Matrix{ComplexF64}(I, N, N)); update_wavefunction!(dft3, θr, ϕr)
+    rot = abs(real(val(dft3) - val(dft2)))
+    @printf("    rotation invariance of log|Ψ| (full updates): %.1e\n", rot)
+    ok = maximum(errs) < 1e-8 && drift < 1e-8 && rot < 1e-8
     global fails += !ok
     @printf("%-40s %s  max|Δ log|Ψ|| = %.1e over 21 configs, incremental drift %.1e, jk_order %d\n",
             label, ok ? "PASS" : "FAIL", maximum(errs), drift, dft.jk_order)

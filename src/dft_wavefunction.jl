@@ -195,7 +195,10 @@ function update_wavefunction!(Ψ::ΨprojDFT, θ::Float64, ϕ::Float64, iter::Int
     unew, vnew = u_v_generator(θ, ϕ)
 
     δv_old = zero(ComplexF64); δv_new = zero(ComplexF64); δu_new = zero(ComplexF64)
-    use_incremental = 2 * Ψ.jk_order < Ψ.system_size
+    # Incremental root removal is forward deflation: rounding error grows like |r|^k with the
+    # u-v ratios r (large for close pairs). Measured 2026-10-24: drift ~1e-14 for jk_order <= 5,
+    # O(10) in log|Ψ| at jk_order 23 (N = 48, Q* = -11). Use it only at low order.
+    use_incremental = 2 * Ψ.jk_order < Ψ.system_size && Ψ.jk_order <= 8
 
     for i in 1:Ψ.system_size
         if i < iter
