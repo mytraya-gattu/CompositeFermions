@@ -1,6 +1,6 @@
 module DFTWavefunction
 
-export ΨprojDFT, load_dft_orbitals
+export ΨprojDFT, load_dft_orbitals, ks_to_mc_coefficients
 
 using LinearAlgebra
 
@@ -366,14 +366,36 @@ end
 # -------------------------------------------------------------------
 # Load DFT orbital file (written by cf_full_dft/src/CFDFT.jl)
 # -------------------------------------------------------------------
-function load_dft_orbitals(path::String)
+# Convention bridge (measured 2026-10-24, ideal_chern_band_cfd/test/basis_convention_*.jl):
+#   cf_full_dft basis state (L, M) at flux q:  sqrt((2L+1)/4π) d^L_{q,M}(-θ) e^{iMφ}
+#   ΨprojDFT unprojected orbital (L, M):       sqrt((2L+1)/4π) d^L_{q,M}(+θ) e^{iMφ}
+# so Y_KS = (-1)^(q-M) Y_MC (no Λ-dependent sign), and ΨprojDFT forms orbital j as
+# Σ_a conj(C[a,j]) f_a (`dft_coeffs' * raw`), while a KS eigenvector c means Σ_a c_a Y_KS_a.
+# Hence C_MC[a,j] = conj(C_KS[a,j]) (-1)^(q-M_a). Without this, KS orbitals reach the MC rotated by
+# π about z and complex conjugated (invisible for real, uniform-field KS vectors).
+function ks_to_mc_coefficients(C_ks::AbstractMatrix, Qstar::Rational{Int64}, nmax::Int)
+    qa = abs(Qstar)
+    Ms = Rational{Int64}[M for λ in 0:nmax for M in -(qa + λ):(qa + λ)]
+    size(C_ks, 1) == length(Ms) || throw(ArgumentError("coefficient rows $(size(C_ks, 1)) != basis size $(length(Ms))"))
+    sgn = [isodd(numerator(Qstar - M)) ? -1.0 : 1.0 for M in Ms]
+    return conj.(C_ks) .* sgn
+end
+
+function load_dft_orbitals(path::String; convert_convention::Bool = true)
     d = JLD2.load(path)
     N     = d["N"]::Int
     twoQ  = d["twoQ"]::Int
     p     = d["p"]::Int
     nmax  = d["nmax"]::Int
-    coeffs = d["coeffs"]::Matrix{ComplexF64}  # (dim_basis × N)
+    coeffs = d["coeffs"]::Matrix{ComplexF64}  # (dim_basis × norb), cf_full_dft convention
     Qstar  = twoQ // 2 - p * (N - 1)
+    if haskey(d, "basis_M_num")
+        Mfile = d["basis_M_num"] .// d["basis_M_den"]
+        qa = abs(Qstar)
+        Mexp = Rational{Int64}[M for λ in 0:nmax for M in -(qa + λ):(qa + λ)]
+        Mfile == Mexp || error("orbital file basis order differs from ΨprojDFT's (λ outer, M ascending)")
+    end
+    convert_convention && (coeffs = ks_to_mc_coefficients(coeffs, Qstar, nmax))
     return Qstar, p, N, nmax, coeffs
 end
 

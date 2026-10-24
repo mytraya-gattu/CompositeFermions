@@ -31,7 +31,7 @@ export Ψproj, ΨoneLL, Ψparton, update_wavefunction!, gibbs_thermalization!,
     rand_θ_ϕ_gen, proposal, legendre_polynomials!, save, load, logdet, lu, inv,
     update_density!, construct_det_ratios,
     HarmonicAccumulator, accumulate_density!, finalize_n_lm,
-    ΨprojDFT, load_dft_orbitals,
+    ΨprojDFT, load_dft_orbitals, ks_to_mc_coefficients,
     CFDConfigs, CFDAccumulator, accumulate_cfd!,
     coulomb_local_energy, HarmonicFieldEvaluator, field_local_energy,
     RealHarmonicField, field_value
