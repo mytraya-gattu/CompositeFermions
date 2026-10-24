@@ -18,6 +18,9 @@ using .DFTWavefunction
 include("cfd_estimators.jl")
 using .CFDEstimators
 
+include("onebody_weight.jl")
+using .OneBodyWeight
+
 using LinearAlgebra
 LinearAlgebra.BLAS.set_num_threads(1)
 
@@ -30,6 +33,7 @@ export Ψproj, ΨoneLL, Ψparton, update_wavefunction!, gibbs_thermalization!,
     HarmonicAccumulator, accumulate_density!, finalize_n_lm,
     ΨprojDFT, load_dft_orbitals,
     CFDConfigs, CFDAccumulator, accumulate_cfd!,
-    coulomb_local_energy, HarmonicFieldEvaluator, field_local_energy
+    coulomb_local_energy, HarmonicFieldEvaluator, field_local_energy,
+    RealHarmonicField, field_value
 
 end

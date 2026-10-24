@@ -308,7 +308,13 @@ _arm_scale(p_obs, p_ideal, a, b) = log(a * p_ideal + b) / log(a * p_obs + b)
 function gibbs_thermalization!(RNG, Ψcurrent::ΨprojDFT, Ψnext::ΨprojDFT,
         θcurrent::Vector{Float64}, ϕcurrent::Vector{Float64},
         θnext::Vector{Float64}, ϕnext::Vector{Float64},
-        σinit::Float64, logpdf::Function, num_thermalization::Int64)
+        σinit::Float64, logpdf::Function, num_thermalization::Int64;
+        log_weight::Union{Nothing,Function} = nothing)
+
+    # `log_weight(θ, ϕ)`, if given, is a per-particle additive term of the
+    # log-pdf (e.g. 2χ(Ω) for the Aharonov-Casher dress e^{Σχ}). It is cached
+    # per particle and re-evaluated only for the moved particle; `logpdf`
+    # stays the wavefunction part only.
 
     a, b = _arm_params(0.5)
     σ = σinit
@@ -317,6 +323,8 @@ function gibbs_thermalization!(RNG, Ψcurrent::ΨprojDFT, Ψnext::ΨprojDFT,
     update_wavefunction!(Ψcurrent, θcurrent, ϕcurrent)
     copy!(Ψnext, Ψcurrent)
     logpdf_current = logpdf(Ψcurrent)
+    wcache = log_weight === nothing ? zeros(length(θcurrent)) :
+             [log_weight(θcurrent[i], ϕcurrent[i]) for i in eachindex(θcurrent)]
 
     tuning = round.(Int64, exp.(LinRange(log(10.0), log(num_thermalization), 25)))
     sampling_iter = 1
@@ -326,12 +334,14 @@ function gibbs_thermalization!(RNG, Ψcurrent::ΨprojDFT, Ψnext::ΨprojDFT,
         θnext[sampling_iter], ϕnext[sampling_iter] = proposal(RNG, θcurrent[sampling_iter], ϕcurrent[sampling_iter], σ)
         update_wavefunction!(Ψnext, θnext[sampling_iter], ϕnext[sampling_iter], sampling_iter)
         logpdf_next = logpdf(Ψnext)
+        wnew = log_weight === nothing ? 0.0 : log_weight(θnext[sampling_iter], ϕnext[sampling_iter])
 
-        if logpdf_next - logpdf_current >= log(rand())
+        if (logpdf_next - logpdf_current) + (wnew - wcache[sampling_iter]) >= log(rand())
             θcurrent[sampling_iter] = θnext[sampling_iter]
             ϕcurrent[sampling_iter] = ϕnext[sampling_iter]
             copy!(Ψcurrent, Ψnext, sampling_iter)
             logpdf_current = logpdf_next
+            wcache[sampling_iter] = wnew
             n_accepted += 1
         else
             θnext[sampling_iter] = θcurrent[sampling_iter]

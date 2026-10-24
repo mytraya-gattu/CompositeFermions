@@ -7,12 +7,20 @@
 #   julia --project=<CF_PROJECT> scripts/cfd_chain_worker.jl \
 #       --N 6 --twoQ 15 --p 1 --nmax 2 \
 #       --orbital-file orbitals.jld2 --configs-file configs.jld2 \
-#       [--disorder-file disorder.jld2] \
+#       [--disorder-file disorder.jld2] [--stream-file stream.jld2] \
 #       --chain 1 --steps 1000000 --therm 200000 --stride 0 \
 #       --out cfd_chain_1.jld2
 #
 # --stride 0 (default) means one sweep (N single-particle moves) between
 # accumulated samples.
+#
+# --stream-file: ideal (Aharonov-Casher) band. The file holds the stream
+# function chi in the cf-psiformer real-harmonic layout (key `chi_real`,
+# unit-sphere harmonics, chi in magnetic-length units). Every configuration
+# carries the common dress exp(sum_i chi(Omega_i)); it cancels in all ratios
+# r_c and enters only the sampling weight, |Psi_guide|^2 exp(2 sum chi).
+# No one-body energy is added: the AC-tuned one-body energy is constant on
+# the band.
 #
 # The orbital file must contain norb ≥ N eigenvector columns (run
 # run_orbital_step.jl with --nev norb). The guide ΨprojDFT uses the columns of
@@ -62,6 +70,7 @@ outfile = get(args, "out", "cfd_chain_$(chain).jld2")
 orbital_file  = req(args, "orbital-file")
 configs_file  = req(args, "configs-file")
 disorder_file = get(args, "disorder-file", "")
+stream_file   = get(args, "stream-file", "")
 
 Qstar = twoQ // 2 - p * (N - 1)
 
@@ -101,6 +110,20 @@ if !isempty(disorder_file)
 end
 fe = HarmonicFieldEvaluator(dis_l, dis_m, dis_V_lm)
 
+# ---------------------------------------------------------------- AC dress
+
+stream_meta = Dict{String, Any}()
+log_weight = nothing
+if !isempty(stream_file)
+    sd = JLD2.load(stream_file)
+    chi_field = RealHarmonicField(Vector{Float64}(sd["chi_real"]))
+    log_weight = (θ, ϕ) -> 2.0 * field_value(chi_field, θ, ϕ)
+    for k in ("xi", "lmax", "field_scale", "R", "texture_sha256", "texture_path")
+        haskey(sd, k) && (stream_meta[k] = sd[k])
+    end
+    println("loaded AC stream from: $stream_file  ($(stream_meta))")
+end
+
 # ---------------------------------------------------------------- guide wavefunction
 
 guide_coeffs = Matrix{ComplexF64}(C_all[:, cfg.configs[guide]])
@@ -119,12 +142,14 @@ acc = CFDAccumulator(cfg, Ψcurrent.dim_basis, N)
 
 println("thermalizing ($ntherm steps) ...")
 sampling_iter, σ, δt_therm, acc_therm = gibbs_thermalization!(
-    RNG, Ψcurrent, Ψnext, θcurrent, ϕcurrent, θnext, ϕnext, σ, logpdf, ntherm)
+    RNG, Ψcurrent, Ψnext, θcurrent, ϕcurrent, θnext, ϕnext, σ, logpdf, ntherm;
+    log_weight = log_weight)
 println("  acceptance rate: $(round(acc_therm, digits=3))  step size: $(round(σ, digits=4))  time: $(round(δt_therm, digits=1))s")
 
 # ---------------------------------------------------------------- production
 
 logpdf_current = logpdf(Ψcurrent)
+wcache = log_weight === nothing ? zeros(N) : [log_weight(θcurrent[i], ϕcurrent[i]) for i in 1:N]
 num_accepted   = 0
 t0 = time()
 
@@ -134,12 +159,14 @@ for mc_iter in 1:nsteps
     θnext[sampling_iter], ϕnext[sampling_iter] = proposal(RNG, θcurrent[sampling_iter], ϕcurrent[sampling_iter], σ)
     update_wavefunction!(Ψnext, θnext[sampling_iter], ϕnext[sampling_iter], sampling_iter)
     logpdf_next = logpdf(Ψnext)
+    wnew = log_weight === nothing ? 0.0 : log_weight(θnext[sampling_iter], ϕnext[sampling_iter])
 
-    if logpdf_next - logpdf_current >= log(rand(RNG))
+    if (logpdf_next - logpdf_current) + (wnew - wcache[sampling_iter]) >= log(rand(RNG))
         θcurrent[sampling_iter] = θnext[sampling_iter]
         ϕcurrent[sampling_iter] = ϕnext[sampling_iter]
         copy!(Ψcurrent, Ψnext, sampling_iter)
         logpdf_current = logpdf_next
+        wcache[sampling_iter] = wnew
         num_accepted  += 1
     else
         θnext[sampling_iter] = θcurrent[sampling_iter]
@@ -185,6 +212,8 @@ JLD2.jldsave(outfile;
     disorder_m = dis_m,
     disorder_V_lm = dis_V_lm,
     disorder_metadata = dis_meta,
+    stream_file = stream_file,
+    stream_metadata = stream_meta,
     orbital_file = orbital_file,
     acceptance_rate = num_accepted / nsteps,
     thermalization_acceptance = acc_therm,
