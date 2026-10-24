@@ -47,6 +47,8 @@ mutable struct ΨprojDFT
     dim_basis::Int64            # total number of basis states
     nmax::Int64                 # highest Lambda level (nmax = Lmax - |Qstar|)
     Lmax::Rational{Int64}
+    jk_order::Int64             # JK derivative order Lmax - Qstar (= nmax for Qstar >= 0,
+                                # nmax + 2|Qstar| for reverse flux), as in Ψproj
 
     μ_list::Vector{Rational{Int64}}
     Lz_list::Vector{Rational{Int64}}
@@ -68,8 +70,8 @@ mutable struct ΨprojDFT
     elementary_symmetric_polynomials::Matrix{ComplexF64}
     reg_coeffs::Vector{Float64}
 
-    wigner_d_matrices::Matrix{ComplexF64}   # (dim_basis*(nmax+1)) × system_size
-    wigner_D_matrices::Array{ComplexF64, 3} # dim_basis × (nmax+1) × system_size
+    wigner_d_matrices::Matrix{ComplexF64}   # (dim_basis*(jk_order+1)) × system_size
+    wigner_D_matrices::Array{ComplexF64, 3} # dim_basis × (jk_order+1) × system_size
 
     jastrow_factor_log::ComplexF64
     raw_slater_det::Matrix{ComplexF64}  # (dim_basis × system_size): un-rotated
@@ -92,28 +94,28 @@ function ΨprojDFT(Qstar::Rational{Int64}, p::Int64, system_size::Int64, nmax::I
     end
     dim_basis = length(l_m_list_full)
     Lmax = qabs + nmax
+    jk_order = numerator(Lmax - Qstar)
 
     size(dft_coeffs) == (dim_basis, system_size) ||
         throw(ArgumentError("dft_coeffs must be ($dim_basis × $system_size), got $(size(dft_coeffs))"))
 
     # Fourier matrix: same construction as Ψproj but for the full l_m_list
-    fourier_matrix = zeros(ComplexF64, dim_basis, nmax + 1, numerator(1 + 2 * Lmax))
+    fourier_matrix = zeros(ComplexF64, dim_basis, jk_order + 1, numerator(1 + 2 * Lmax))
 
     Lgrid = unique(first.(l_m_list_full))
     liters = [findall(x -> x[1] == L, l_m_list_full) for L in Lgrid]
 
     for (Liter, L) in enumerate(Lgrid)
-        lambda = Int(L - qabs)
         Lz_sub = last.(l_m_list_full[liters[Liter]])
         fm = generate_fourier_matrices(Qstar, system_size, L, Lz_sub)
-        # fm has shape (n_states_at_L, lambda+1, 2L+1)
-        # place into fourier_matrix at columns covering [-L..L] within [-Lmax..Lmax]
+        # fm has shape (n_states_at_L, L-Qstar+1, 2L+1); L-Qstar = λ for forward flux,
+        # λ + 2|Qstar| for reverse flux. Place at columns [-L..L] within [-Lmax..Lmax].
         μ_start = numerator(1 - L + Lmax)
         μ_end   = numerator(1 + L + Lmax)
-        fourier_matrix[liters[Liter], 1:(lambda + 1), μ_start:μ_end] .= fm
+        fourier_matrix[liters[Liter], 1:numerator(L - Qstar + 1), μ_start:μ_end] .= fm
     end
 
-    fourier_tot_matrix = reshape(fourier_matrix, dim_basis * (nmax + 1), numerator(1 + 2 * Lmax))
+    fourier_tot_matrix = reshape(fourier_matrix, dim_basis * (jk_order + 1), numerator(1 + 2 * Lmax))
 
     μ_list = collect(-Lmax:1:Lmax)
     Lz_list = last.(l_m_list_full)
@@ -125,16 +127,16 @@ function ΨprojDFT(Qstar::Rational{Int64}, p::Int64, system_size::Int64, nmax::I
 
     dist_matrix      = zeros(Float64, system_size - 1, system_size)
     u_v_ratio_matrix = zeros(ComplexF64, system_size - 1, system_size)
-    elementary_symmetric_polynomials = zeros(ComplexF64, nmax + 1, system_size)
-    reg_coeffs = Float64[i / (system_size - i) for i in 1:nmax]
+    elementary_symmetric_polynomials = zeros(ComplexF64, jk_order + 1, system_size)
+    reg_coeffs = Float64[i / (system_size - i) for i in 1:jk_order]
 
-    wigner_d_matrices = zeros(ComplexF64, dim_basis * (nmax + 1), system_size)
-    wigner_D_matrices = zeros(ComplexF64, dim_basis, nmax + 1, system_size)
+    wigner_d_matrices = zeros(ComplexF64, dim_basis * (jk_order + 1), system_size)
+    wigner_D_matrices = zeros(ComplexF64, dim_basis, jk_order + 1, system_size)
 
     raw_slater_det = zeros(ComplexF64, dim_basis, system_size)
     slater_det     = zeros(ComplexF64, system_size, system_size)
 
-    return ΨprojDFT(Qstar, p, system_size, l_m_list_full, dim_basis, nmax, Lmax,
+    return ΨprojDFT(Qstar, p, system_size, l_m_list_full, dim_basis, nmax, Lmax, jk_order,
         μ_list, Lz_list, dft_coeffs,
         fourier_tot_matrix, U, V, exp_θ, exp_ϕ,
         dist_matrix, u_v_ratio_matrix,
@@ -167,7 +169,7 @@ function update_wavefunction!(Ψ::ΨprojDFT, θ::Vector{Float64}, ϕ::Vector{Flo
     @simd for ei in axes(Ψ.elementary_symmetric_polynomials, 2)
         @inbounds @views get_symmetric_polynomials!(
             Ψ.elementary_symmetric_polynomials[:, ei],
-            Ψ.u_v_ratio_matrix[:, ei], Ψ.nmax, Ψ.reg_coeffs)
+            Ψ.u_v_ratio_matrix[:, ei], Ψ.jk_order, Ψ.reg_coeffs)
     end
 
     Ψ.wigner_d_matrices .= Ψ.fourier_tot_matrix * Ψ.exp_θ
@@ -193,7 +195,7 @@ function update_wavefunction!(Ψ::ΨprojDFT, θ::Float64, ϕ::Float64, iter::Int
     unew, vnew = u_v_generator(θ, ϕ)
 
     δv_old = zero(ComplexF64); δv_new = zero(ComplexF64); δu_new = zero(ComplexF64)
-    use_incremental = 2 * Ψ.nmax < Ψ.system_size
+    use_incremental = 2 * Ψ.jk_order < Ψ.system_size
 
     for i in 1:Ψ.system_size
         if i < iter
@@ -206,7 +208,7 @@ function update_wavefunction!(Ψ::ΨprojDFT, θ::Float64, ϕ::Float64, iter::Int
             if use_incremental
                 @inbounds @views update_symmetric_polynomials!(
                     Ψ.elementary_symmetric_polynomials[:, i],
-                    r_old, Ψ.u_v_ratio_matrix[iter - 1, i], Ψ.nmax, Ψ.reg_coeffs)
+                    r_old, Ψ.u_v_ratio_matrix[iter - 1, i], Ψ.jk_order, Ψ.reg_coeffs)
             end
             Ψ.jastrow_factor_log += Ψ.p * log(δv_new / δv_old)
             Ψ.dist_matrix[iter - 1, i] = 2.0 * abs(δv_new)
@@ -221,7 +223,7 @@ function update_wavefunction!(Ψ::ΨprojDFT, θ::Float64, ϕ::Float64, iter::Int
             if use_incremental
                 @inbounds @views update_symmetric_polynomials!(
                     Ψ.elementary_symmetric_polynomials[:, i],
-                    r_old, Ψ.u_v_ratio_matrix[iter, i], Ψ.nmax, Ψ.reg_coeffs)
+                    r_old, Ψ.u_v_ratio_matrix[iter, i], Ψ.jk_order, Ψ.reg_coeffs)
             end
             Ψ.jastrow_factor_log += Ψ.p * log(δv_new / δv_old)
             Ψ.dist_matrix[i - 1, iter] = 2.0 * abs(δv_new)
@@ -233,12 +235,12 @@ function update_wavefunction!(Ψ::ΨprojDFT, θ::Float64, ϕ::Float64, iter::Int
     if use_incremental
         @inbounds @views get_symmetric_polynomials!(
             Ψ.elementary_symmetric_polynomials[:, iter],
-            Ψ.u_v_ratio_matrix[:, iter], Ψ.nmax, Ψ.reg_coeffs)
+            Ψ.u_v_ratio_matrix[:, iter], Ψ.jk_order, Ψ.reg_coeffs)
     else
         @simd for ei in axes(Ψ.elementary_symmetric_polynomials, 2)
             @inbounds @views get_symmetric_polynomials!(
                 Ψ.elementary_symmetric_polynomials[:, ei],
-                Ψ.u_v_ratio_matrix[:, ei], Ψ.nmax, Ψ.reg_coeffs)
+                Ψ.u_v_ratio_matrix[:, ei], Ψ.jk_order, Ψ.reg_coeffs)
         end
     end
 
